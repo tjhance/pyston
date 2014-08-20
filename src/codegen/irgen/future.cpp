@@ -21,7 +21,6 @@ void raiseSyntaxError(const char* file, AST* node_at, const char* msg, ...) {
     va_list ap;
     va_start(ap, msg);
 
-    // TODO uh, glaring buffer-overflow
     char buf[1024];
     vsnprintf(buf, sizeof(buf), msg, ap);
 
@@ -106,7 +105,7 @@ FutureFlags getFutureFlags(AST_Module* m, const char* file) {
                         raiseFutureImportErrorNotFound(file, alias, option_name.c_str());
                     } else {
                         const FutureOption& fo = iter->second;
-                        if (PYTHON_VERSION_HEX >= fo.mandatory_version_hex) {
+                        if (PYTHON_VERSION_HEX >= fo.optional_version_hex) {
                             ff |= fo.ff_mask;
                         } else {
                             raiseFutureImportErrorNotFound(file, alias, option_name.c_str());

@@ -262,7 +262,6 @@ void raiseExcHelper(BoxedClass* cls, const char* msg, ...) {
         // printf("\n");
         // va_start(ap, msg);
 
-        // TODO uh, glaring buffer-overflow possibility
         char buf[1024];
         vsnprintf(buf, sizeof(buf), msg, ap);
 
