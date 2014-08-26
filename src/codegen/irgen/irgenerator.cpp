@@ -1617,6 +1617,7 @@ private:
 
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
+            printf("alias->asname is '%s'\n", alias->asname.c_str());
 
             const std::string& modname = alias->name;
             const std::string& asname = alias->asname.size() ? alias->asname : alias->name;
