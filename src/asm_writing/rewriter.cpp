@@ -753,6 +753,10 @@ void Rewriter::commit() {
 
     assert(vars_by_location.size() == 0);
 
+    #ifndef NDEBUG
+    printf("\nREWROTE:\n\n%s\n\n", assembler->get_log().c_str());
+    #endif
+
     rewrite->commit(decision_path, this);
 }
 

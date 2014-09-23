@@ -17,6 +17,7 @@
 
 #include <unordered_set>
 
+#include "asm_writing/logasm.h"
 #include "asm_writing/types.h"
 #include "core/ast.h"
 
@@ -119,6 +120,16 @@ public:
     void emitAnnotation(int num);
 
     bool isExactlyFull() { return addr == end_addr; }
+
+#ifndef NDEBUG
+    AssemblyLogger logger;
+    void log_comment(const std::string& s) { logger.log_comment(s, addr - start_addr); }
+    std::string get_log() {
+        return logger.finalize_log(start_addr, addr);
+    }
+#else
+    void log_statement(const std::string&) {}
+#endif
 };
 
 uint8_t* initializePatchpoint2(uint8_t* start_addr, uint8_t* slowpath_start, uint8_t* end_addr, StackInfo stack_info,
