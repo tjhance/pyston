@@ -472,6 +472,12 @@ public:
     void freeze();
 };
 
+class BoxedHeapTypeClass : public BoxedClass {
+public:
+    BoxedHeapTypeClass(BoxedClass* metaclass, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int instance_size,
+               bool is_user_defined) : BoxedClass(metaclass, base, gc_visit, attrs_offset, instance_size, is_user_defined) {}
+};
+
 static_assert(sizeof(pyston::Box) == sizeof(struct _object), "");
 static_assert(offsetof(pyston::Box, cls) == offsetof(struct _object, ob_type), "");
 

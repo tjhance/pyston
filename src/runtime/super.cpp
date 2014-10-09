@@ -102,7 +102,7 @@ Box* superNew(Box* _cls, Box* _type, Box* inst) {
 void setupSuper() {
     super_cls = new BoxedClass(type_cls, object_cls, &BoxedSuper::gcHandler, 0, sizeof(BoxedSuper), false);
 
-    super_cls->giveAttr("__name__", boxStrConstant("super"));
+    super_cls->tp_name = "super";
 
     super_cls->giveAttr("__getattribute__", new BoxedFunction(boxRTFunction((void*)superGetattribute, UNKNOWN, 2)));
 

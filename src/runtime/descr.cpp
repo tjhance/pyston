@@ -24,9 +24,12 @@ static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
 }
 
 void setupDescr() {
-    member_cls->giveAttr("__name__", boxStrConstant("member"));
+    member_cls->tp_name = "member_descriptor";
     member_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)memberGet, UNKNOWN, 3)));
     member_cls->freeze();
+
+    getset_cls->tp_name = "getset_descriptor";
+    getset_cls->freeze();
 }
 
 void teardownDescr() {

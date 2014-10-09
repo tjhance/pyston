@@ -80,7 +80,7 @@ Box* getSysStdout();
 extern "C" {
 extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
     *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *xrange_cls,
-    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls;
+    *member_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *getset_cls;
 }
 extern "C" { extern Box* None, *NotImplemented, *True, *False; }
 extern "C" {
@@ -388,6 +388,16 @@ public:
     BoxedMemberDescriptor(MemberType type, int offset) : Box(member_cls), type(type), offset(offset) {}
     BoxedMemberDescriptor(PyMemberDef* member)
         : Box(member_cls), type((MemberType)member->type), offset(member->offset) {}
+};
+
+class BoxedGetsetDescriptor : public Box {
+public:
+    Box* (*get)(Box*, void*);
+    int (*set)(Box*, Box*, void*);
+    void* closure;
+
+    BoxedGetsetDescriptor(Box* (*get)(Box*, void*), int (*set)(Box*, Box*, void*), void* closure)
+        : Box(getset_cls), get(get), set(set), closure(closure) {}
 };
 
 // TODO is there any particular reason to make this a Box, ie a python-level object?

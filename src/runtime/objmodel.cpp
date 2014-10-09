@@ -907,6 +907,35 @@ Box* dataDescriptorInstanceSpecialCases(GetattrRewriteArgs* rewrite_args, const 
         }
     }
 
+    // Special case: data descriptor: getset descriptor
+    if (descr->cls == getset_cls) {
+        BoxedGetsetDescriptor* getset_descr = static_cast<BoxedGetsetDescriptor*>(descr);
+
+        // TODO some more checks should go here
+
+        if (getset_descr->get == NULL) {
+            raiseExcHelper(AttributeError, "attribute '%s' of '%s' object is not readable", attr_name.c_str(),
+                           getTypeName(getset_descr));
+        }
+
+        // Abort because right now we can't call twice in a rewrite
+        if (for_call) {
+            rewrite_args = NULL;
+        }
+
+        if (rewrite_args->rewriter) {
+            // hmm, maybe we should write assembly which can look up the function address and call any function
+            r_descr->addAttrGuard(offsetof(BoxedGetsetDescriptor, get), (intptr_t)getset_descr->get);
+
+            RewriterVar* r_closure = r_descr->getAttr(offsetof(BoxedGetsetDescriptor, closure));
+            rewrite_args->out_rtn = rewrite_args->rewriter->call(
+                /* can_call_into_python */ true, (void*)getset_descr->get, rewrite_args->obj, r_closure);
+            rewrite_args->out_success = true;
+        }
+
+        return getset_descr->get(obj, getset_descr->closure);
+    }
+
     return NULL;
 }
 

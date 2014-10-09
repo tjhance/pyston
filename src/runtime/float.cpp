@@ -585,7 +585,7 @@ static void _addFunc(const char* name, ConcreteCompilerType* rtn_type, void* flo
 }
 
 void setupFloat() {
-    float_cls->giveAttr("__name__", boxStrConstant("float"));
+    float_cls->tp_name = "float";
 
     _addFunc("__add__", BOXED_FLOAT, (void*)floatAddFloat, (void*)floatAddInt, (void*)floatAdd);
     float_cls->giveAttr("__radd__", float_cls->getattr("__add__"));

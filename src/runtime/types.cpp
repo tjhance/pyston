@@ -291,7 +291,7 @@ extern "C" void closureGCHandler(GCVisitor* v, Box* b) {
 extern "C" {
 BoxedClass* object_cls, *type_cls, *none_cls, *bool_cls, *int_cls, *float_cls, *str_cls, *function_cls,
     *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls, *member_cls,
-    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls;
+    *closure_cls, *generator_cls, *complex_cls, *basestring_cls, *unicode_cls, *getset_cls;
 
 
 BoxedTuple* EmptyTuple;
@@ -396,6 +396,19 @@ static Box* functionCall(BoxedFunction* self, Box* args, Box* kwargs) {
     assert(args->cls == tuple_cls);
     assert(kwargs->cls == dict_cls);
     return runtimeCall(self, ArgPassSpec(0, 0, true, true), args, kwargs, NULL, NULL, NULL);
+}
+
+static Box* func_get_name(Box* b, void*) {
+    assert(b->cls == function_cls);
+    BoxedFunction* func = static_cast<BoxedFunction*>(b);
+
+    // TODO can't be right since you also need to be able to set the __name__ of a function
+    // but that should not set the name in the source.
+    return boxString(func->f->source->getName());
+}
+
+static int func_set_name(Box*, Box*, void*) {
+    RELEASE_ASSERT(0, "not implemented");
 }
 
 extern "C" {
@@ -642,6 +655,32 @@ Box* objectStr(Box* obj) {
     return callattrInternal(obj, &repr_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 }
 
+static Box* type_name(Box* b, void*) {
+    assert(b->cls == type_cls);
+    BoxedClass* type = static_cast<BoxedClass*>(b);
+
+    if (type->tp_flags & Py_TPFLAGS_HEAPTYPE) {
+        RELEASE_ASSERT(false, "not implemented");
+        /*
+        PyHeapTypeObject* et = (PyHeapTypeObject*)type;
+
+        Py_INCREF(et->ht_name);
+        return et->ht_name;
+        */
+    } else {
+        const char* s = strrchr(type->tp_name, '.');
+        if (s == NULL)
+            s = type->tp_name;
+        else
+            s++;
+        return PyString_FromString(s);
+    }
+}
+
+static int type_name_setter(Box* b, Box* v, void*) {
+    RELEASE_ASSERT(false, "not implemented");
+}
+
 bool TRACK_ALLOCATIONS = false;
 void setupRuntime() {
     root_hcls = HiddenClass::makeRoot();
@@ -698,6 +737,7 @@ void setupRuntime() {
     set_cls = new BoxedClass(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
     frozenset_cls = new BoxedClass(type_cls, object_cls, &setGCHandler, 0, sizeof(BoxedSet), false);
     member_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMemberDescriptor), false);
+    getset_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedGetsetDescriptor), false);
     closure_cls = new BoxedClass(type_cls, object_cls, &closureGCHandler, offsetof(BoxedClosure, attrs),
                                  sizeof(BoxedClosure), false);
     attrwrapper_cls = new BoxedClass(type_cls, object_cls, &AttrWrapper::gcHandler, 0, sizeof(AttrWrapper), false);
@@ -717,7 +757,7 @@ void setupRuntime() {
     LONG = typeFromClass(long_cls);
     BOXED_COMPLEX = typeFromClass(complex_cls);
 
-    object_cls->giveAttr("__name__", boxStrConstant("object"));
+    object_cls->tp_name = "object";
     object_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)objectNew, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
@@ -728,7 +768,7 @@ void setupRuntime() {
     typeCallObj->internal_callable = &typeCallInternal;
     type_cls->giveAttr("__call__", new BoxedFunction(typeCallObj));
 
-    type_cls->giveAttr("__name__", boxStrConstant("type"));
+    type_cls->giveAttr("__name__", new BoxedGetsetDescriptor(type_name, type_name_setter, NULL));
     type_cls->giveAttr("__new__",
                        new BoxedFunction(boxRTFunction((void*)typeNew, UNKNOWN, 4, 2, false, false), { NULL, NULL }));
     type_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)typeRepr, STR, 1)));
@@ -736,19 +776,19 @@ void setupRuntime() {
     type_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)typeHash, BOXED_INT, 1)));
     type_cls->freeze();
 
-    none_cls->giveAttr("__name__", boxStrConstant("NoneType"));
+    none_cls->tp_name = "NoneType";
     none_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)noneRepr, STR, 1)));
     none_cls->giveAttr("__str__", none_cls->getattr("__repr__"));
     none_cls->giveAttr("__hash__", new BoxedFunction(boxRTFunction((void*)noneHash, UNKNOWN, 1)));
     none_cls->giveAttr("__nonzero__", new BoxedFunction(boxRTFunction((void*)noneNonzero, BOXED_BOOL, 1)));
     none_cls->freeze();
 
-    module_cls->giveAttr("__name__", boxStrConstant("module"));
+    module_cls->tp_name = "module";
     module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1)));
     module_cls->giveAttr("__str__", module_cls->getattr("__repr__"));
     module_cls->freeze();
 
-    closure_cls->giveAttr("__name__", boxStrConstant("closure"));
+    closure_cls->tp_name = "closure";
     closure_cls->freeze();
 
     setupBool();
@@ -769,7 +809,7 @@ void setupRuntime() {
     setupUnicode();
     setupDescr();
 
-    function_cls->giveAttr("__name__", boxStrConstant("function"));
+    function_cls->tp_name = "function";
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__str__", function_cls->getattr("__repr__"));
     function_cls->giveAttr("__module__",
@@ -777,14 +817,15 @@ void setupRuntime() {
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
+    function_cls->giveAttr("__name__", new BoxedGetsetDescriptor(func_get_name, func_set_name, NULL));
     function_cls->freeze();
 
-    instancemethod_cls->giveAttr("__name__", boxStrConstant("instancemethod"));
+    instancemethod_cls->tp_name = "instancemethod";
     instancemethod_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)instancemethodRepr, STR, 1)));
     instancemethod_cls->giveAttr("__eq__", new BoxedFunction(boxRTFunction((void*)instancemethodEq, UNKNOWN, 2)));
     instancemethod_cls->freeze();
 
-    slice_cls->giveAttr("__name__", boxStrConstant("slice"));
+    slice_cls->tp_name = "slice";
     slice_cls->giveAttr("__new__",
                         new BoxedFunction(boxRTFunction((void*)sliceNew, UNKNOWN, 4, 2, false, false), { NULL, None }));
     slice_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)sliceRepr, STR, 1)));
@@ -794,7 +835,7 @@ void setupRuntime() {
     slice_cls->giveAttr("step", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, SLICE_STEP_OFFSET));
     slice_cls->freeze();
 
-    attrwrapper_cls->giveAttr("__name__", boxStrConstant("attrwrapper"));
+    attrwrapper_cls->tp_name = "attrwrapper";
     attrwrapper_cls->giveAttr("__setitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::setitem, UNKNOWN, 3)));
     attrwrapper_cls->giveAttr("__getitem__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::getitem, UNKNOWN, 2)));
     attrwrapper_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::str, UNKNOWN, 1)));

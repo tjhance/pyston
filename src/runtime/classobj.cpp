@@ -246,7 +246,7 @@ void setupClassobj() {
     instance_cls = new BoxedClass(type_cls, object_cls, &BoxedInstance::gcHandler, offsetof(BoxedInstance, attrs),
                                   sizeof(BoxedInstance), false);
 
-    classobj_cls->giveAttr("__name__", boxStrConstant("classobj"));
+    classobj_cls->tp_name = "classobj";
 
     classobj_cls->giveAttr("__new__",
                            new BoxedFunction(boxRTFunction((void*)classobjNew, UNKNOWN, 4, 0, false, false)));
@@ -259,7 +259,7 @@ void setupClassobj() {
     classobj_cls->freeze();
 
 
-    instance_cls->giveAttr("__name__", boxStrConstant("instance"));
+    instance_cls->tp_name = "instance";
 
     instance_cls->giveAttr("__getattribute__",
                            new BoxedFunction(boxRTFunction((void*)instanceGetattribute, UNKNOWN, 2)));

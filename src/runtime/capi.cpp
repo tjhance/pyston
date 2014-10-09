@@ -272,7 +272,6 @@ extern "C" int PyType_Ready(PyTypeObject* cls) {
         cls->cls = cls->base->cls;
 
     assert(cls->tp_name);
-    cls->giveAttr("__name__", boxStrConstant(cls->tp_name));
     // tp_name
     // tp_basicsize, tp_itemsize
     // tp_doc
@@ -970,7 +969,7 @@ BoxedModule* importTestExtension(const std::string& name) {
 
 void setupCAPI() {
     capifunc_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedCApiFunction), false);
-    capifunc_cls->giveAttr("__name__", boxStrConstant("capifunc"));
+    capifunc_cls->tp_name = "capifunc";
 
     capifunc_cls->giveAttr("__repr__",
                            new BoxedFunction(boxRTFunction((void*)BoxedCApiFunction::__repr__, UNKNOWN, 1)));
@@ -982,7 +981,7 @@ void setupCAPI() {
     capifunc_cls->freeze();
 
     method_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedMethodDescriptor), false);
-    method_cls->giveAttr("__name__", boxStrConstant("method"));
+    method_cls->tp_name = "method";
     method_cls->giveAttr("__get__",
                          new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__get__, UNKNOWN, 3)));
     method_cls->giveAttr("__call__", new BoxedFunction(boxRTFunction((void*)BoxedMethodDescriptor::__call__, UNKNOWN, 2,
@@ -990,13 +989,13 @@ void setupCAPI() {
     method_cls->freeze();
 
     wrapperdescr_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperDescriptor), false);
-    wrapperdescr_cls->giveAttr("__name__", boxStrConstant("wrapper_descriptor"));
+    wrapperdescr_cls->tp_name = "wrapper_descriptor";
     wrapperdescr_cls->giveAttr("__get__",
                                new BoxedFunction(boxRTFunction((void*)BoxedWrapperDescriptor::__get__, UNKNOWN, 3)));
     wrapperdescr_cls->freeze();
 
     wrapperobject_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedWrapperObject), false);
-    wrapperobject_cls->giveAttr("__name__", boxStrConstant("method-wrapper"));
+    wrapperobject_cls->tp_name = "method-wrapper";
     wrapperobject_cls->giveAttr(
         "__call__", new BoxedFunction(boxRTFunction((void*)BoxedWrapperObject::__call__, UNKNOWN, 1, 0, true, true)));
     wrapperobject_cls->freeze();

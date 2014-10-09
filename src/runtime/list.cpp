@@ -559,7 +559,7 @@ Box* listEq(BoxedList* self, Box* rhs) {
 void setupList() {
     list_iterator_cls = new BoxedClass(type_cls, object_cls, &listIteratorGCHandler, 0, sizeof(BoxedList), false);
 
-    list_cls->giveAttr("__name__", boxStrConstant("list"));
+    list_cls->tp_name = "list";
 
     list_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)listLen, BOXED_INT, 1)));
 
@@ -614,7 +614,7 @@ void setupList() {
     list_cls->freeze();
 
 
-    list_iterator_cls->giveAttr("__name__", boxStrConstant("listiterator"));
+    list_iterator_cls->tp_name = "listiterator";
 
     CLFunction* hasnext = boxRTFunction((void*)listiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)listiterHasnext, BOXED_BOOL);

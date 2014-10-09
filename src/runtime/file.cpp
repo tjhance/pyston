@@ -155,7 +155,7 @@ Box* fileNew(BoxedClass* cls, Box* s, Box* m) {
 }
 
 void setupFile() {
-    file_cls->giveAttr("__name__", boxStrConstant("file"));
+    file_cls->tp_name = "file";
 
     file_cls->giveAttr("read",
                        new BoxedFunction(boxRTFunction((void*)fileRead, STR, 2, 1, false, false), { boxInt(-1) }));

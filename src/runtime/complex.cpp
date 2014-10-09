@@ -232,7 +232,7 @@ Box* complexNew(Box* _cls, Box* real, Box* imag) {
 }
 
 void setupComplex() {
-    complex_cls->giveAttr("__name__", boxStrConstant("complex"));
+    complex_cls->tp_name = "complex";
 
     complex_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)complexNew, UNKNOWN, 3, 2, false, false),
                                                        { boxInt(0), boxInt(0) }));

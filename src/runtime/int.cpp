@@ -727,7 +727,7 @@ void setupInt() {
         gc::registerPermanentRoot(interned_ints[i]);
     }
 
-    int_cls->giveAttr("__name__", boxStrConstant("int"));
+    int_cls->tp_name = "int";
 
     _addFuncIntFloatUnknown("__add__", (void*)intAddInt, (void*)intAddFloat, (void*)intAdd);
     _addFuncIntUnknown("__and__", BOXED_INT, (void*)intAndInt, (void*)intAnd);

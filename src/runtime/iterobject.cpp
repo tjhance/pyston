@@ -58,7 +58,7 @@ Box* seqiterNext(Box* s) {
 
 void setupIter() {
     seqiter_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedSeqIter), false);
-    seqiter_cls->giveAttr("__name__", boxStrConstant("iterator"));
+    seqiter_cls->tp_name = "iterator";
 
     seqiter_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)seqiterNext, UNKNOWN, 1)));
     seqiter_cls->giveAttr("__hasnext__", new BoxedFunction(boxRTFunction((void*)seqiterHasnext, BOXED_BOOL, 1)));

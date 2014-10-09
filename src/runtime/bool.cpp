@@ -56,7 +56,7 @@ extern "C" Box* boolNew(Box* cls, Box* val) {
 }
 
 void setupBool() {
-    bool_cls->giveAttr("__name__", boxStrConstant("bool"));
+    bool_cls->tp_name = "bool";
 
     bool_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)boolInvert, BOXED_INT, 1)));
     bool_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)boolPos, BOXED_INT, 1)));

@@ -372,7 +372,7 @@ extern "C" void tupleIteratorGCHandler(GCVisitor* v, Box* b) {
 void setupTuple() {
     tuple_iterator_cls = new BoxedClass(type_cls, object_cls, &tupleIteratorGCHandler, 0, sizeof(BoxedTuple), false);
 
-    tuple_cls->giveAttr("__name__", boxStrConstant("tuple"));
+    tuple_cls->tp_name = "tuple";
 
     tuple_cls->giveAttr("__new__", new BoxedFunction(boxRTFunction((void*)tupleNew, UNKNOWN, 1, 0, true, true)));
     CLFunction* getitem = createRTFunction(2, 0, 0, 0);
@@ -405,7 +405,7 @@ void setupTuple() {
 
     tuple_cls->freeze();
 
-    tuple_iterator_cls->giveAttr("__name__", boxStrConstant("tupleiterator"));
+    tuple_iterator_cls->tp_name = "tupleiterator";
 
     CLFunction* hasnext = boxRTFunction((void*)tupleiterHasnextUnboxed, BOOL, 1);
     addRTFunction(hasnext, (void*)tupleiterHasnext, BOXED_BOOL);

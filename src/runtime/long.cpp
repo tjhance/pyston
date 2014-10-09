@@ -689,7 +689,7 @@ Box* longHash(BoxedLong* self) {
 }
 
 void setupLong() {
-    long_cls->giveAttr("__name__", boxStrConstant("long"));
+    long_cls->tp_name = "long";
 
     long_cls->giveAttr(
         "__new__", new BoxedFunction(boxRTFunction((void*)longNew, UNKNOWN, 3, 2, false, false), { boxInt(0), NULL }));

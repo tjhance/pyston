@@ -114,10 +114,10 @@ Box* xrangeIter(Box* self) {
 
 void setupXrange() {
     xrange_cls = new BoxedClass(type_cls, object_cls, NULL, 0, sizeof(BoxedXrange), false);
-    xrange_cls->giveAttr("__name__", boxStrConstant("xrange"));
+    xrange_cls->tp_name = "xrange";
     xrange_iterator_cls = new BoxedClass(type_cls, object_cls, &BoxedXrangeIterator::xrangeIteratorGCHandler, 0,
                                          sizeof(BoxedXrangeIterator), false);
-    xrange_iterator_cls->giveAttr("__name__", boxStrConstant("rangeiterator"));
+    xrange_iterator_cls->tp_name = "rangeiterator";
 
     xrange_cls->giveAttr(
         "__new__",

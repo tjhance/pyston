@@ -485,7 +485,7 @@ Box* exceptionRepr(Box* b) {
 static BoxedClass* makeBuiltinException(BoxedClass* base, const char* name) {
     BoxedClass* cls
         = new BoxedClass(type_cls, base, NULL, offsetof(BoxedException, attrs), sizeof(BoxedException), false);
-    cls->giveAttr("__name__", boxStrConstant(name));
+    cls->tp_name = name;
     cls->giveAttr("__module__", boxStrConstant("exceptions"));
 
     if (base == object_cls) {

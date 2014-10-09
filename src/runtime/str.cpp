@@ -1024,7 +1024,7 @@ static PyBufferProcs string_as_buffer = {
 
 void setupStr() {
     str_iterator_cls = new BoxedClass(type_cls, object_cls, &strIteratorGCHandler, 0, sizeof(BoxedString), false);
-    str_iterator_cls->giveAttr("__name__", boxStrConstant("striterator"));
+    str_iterator_cls->tp_name = "striterator";
     str_iterator_cls->giveAttr("__hasnext__",
                                new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::hasnext, BOXED_BOOL, 1)));
     str_iterator_cls->giveAttr("next", new BoxedFunction(boxRTFunction((void*)BoxedStringIterator::next, STR, 1)));
@@ -1032,7 +1032,7 @@ void setupStr() {
 
     str_cls->tp_as_buffer = &string_as_buffer;
 
-    str_cls->giveAttr("__name__", boxStrConstant("str"));
+    str_cls->tp_name = "str";
 
     str_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)strLen, BOXED_INT, 1)));
     str_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)strStr, STR, 1)));
@@ -1107,7 +1107,7 @@ void setupStr() {
         "__doc__", boxStrConstant("Type basestring cannot be instantiated; it is the base for str and unicode."));
     basestring_cls->giveAttr("__new__",
                              new BoxedFunction(boxRTFunction((void*)basestringNew, UNKNOWN, 1, 0, true, true)));
-    basestring_cls->giveAttr("__name__", boxStrConstant("basestring"));
+    basestring_cls->tp_name = "basestring";
     basestring_cls->freeze();
 }
 

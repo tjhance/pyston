@@ -133,8 +133,6 @@ extern "C" BoxedGenerator::BoxedGenerator(BoxedFunction* function, Box* arg1, Bo
     : Box(generator_cls), function(function), arg1(arg1), arg2(arg2), arg3(arg3), args(nullptr), entryExited(false),
       returnValue(nullptr), exception(nullptr) {
 
-    giveAttr("__name__", boxString(function->f->source->getName()));
-
     int numArgs = function->f->num_args;
     if (numArgs > 3) {
         numArgs -= 3;
@@ -176,11 +174,18 @@ extern "C" void generatorGCHandler(GCVisitor* v, Box* b) {
     v->visitPotentialRange((void**)&g->stack[0], (void**)&g->stack[BoxedGenerator::STACK_SIZE]);
 }
 
+static Box* gen_get_name(Box* b, void*) {
+    assert(b->cls == generator_cls);
+    BoxedGenerator* gen = static_cast<BoxedGenerator*>(b);
+
+    return boxString(gen->function->f->source->getName());
+}
 
 void setupGenerator() {
     generator_cls = new BoxedClass(type_cls, object_cls, &generatorGCHandler, offsetof(BoxedGenerator, attrs),
                                    sizeof(BoxedGenerator), false);
-    generator_cls->giveAttr("__name__", boxStrConstant("generator"));
+    generator_cls->tp_name = "generator";
+    generator_cls->giveAttr("__name__", new BoxedGetsetDescriptor(gen_get_name, NULL, NULL));
     generator_cls->giveAttr("__iter__",
                             new BoxedFunction(boxRTFunction((void*)generatorIter, typeFromClass(generator_cls), 1)));
 
