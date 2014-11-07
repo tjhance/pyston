@@ -12,90 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PYSTON_GC_HEAP_H
-#define PYSTON_GC_HEAP_H
-
-#include <cstddef>
-#include <cstdint>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <stdint.h>
+#include <sys/mman.h>
 
 #include "core/common.h"
-#include "core/threading.h"
+#include "core/util.h"
+#include "gc/gc_alloc.h"
+
+#ifndef NVALGRIND
+#include "valgrind.h"
+#endif
 
 namespace pyston {
 namespace gc {
 
-typedef uint8_t kindid_t;
-struct GCAllocation {
-    unsigned int gc_flags : 8;
-    GCKind kind_id : 8;
-    unsigned int _reserved1 : 16;
-    unsigned int kind_data : 32;
+#define PAGE_SIZE 4096
+class Arena {
+private:
+    void* start;
+    void* cur;
 
-    char user_data[0];
+public:
+    constexpr Arena(void* start) : start(start), cur(start) {}
 
-    static GCAllocation* fromUserData(void* user_data) {
-        char* d = reinterpret_cast<char*>(user_data);
-        return reinterpret_cast<GCAllocation*>(d - offsetof(GCAllocation, user_data));
+    void* doMmap(size_t size) {
+        assert(size % PAGE_SIZE == 0);
+
+        void* mrtn = mmap(cur, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        assert((uintptr_t)mrtn != -1 && "failed to allocate memory from OS");
+        ASSERT(mrtn == cur, "%p %p\n", mrtn, cur);
+        cur = (uint8_t*)cur + size;
+        return mrtn;
+    }
+
+    bool contains(void* addr) { return start <= addr && addr < cur; }
+
+    void* getStart() {
+        return start;
     }
 };
-static_assert(sizeof(GCAllocation) <= sizeof(void*),
-              "we should try to make sure the gc header is word-sized or smaller");
 
-#define MARK_BIT 0x1
+extern Arena gen1_arena;
+extern Arena gen2_arena;
+extern Arena large_arena;
 
-inline bool isMarked(GCAllocation* header) {
-    return (header->gc_flags & MARK_BIT) != 0;
-}
-
-inline void setMark(GCAllocation* header) {
-    assert(!isMarked(header));
-    header->gc_flags |= MARK_BIT;
-}
-
-inline void clearMark(GCAllocation* header) {
-    assert(isMarked(header));
-    header->gc_flags &= ~MARK_BIT;
-}
-
-#undef MARK_BIT
-
-
-
-#define BLOCK_SIZE (4 * 4096)
-#define ATOM_SIZE 16
-static_assert(BLOCK_SIZE % ATOM_SIZE == 0, "");
-#define ATOMS_PER_BLOCK (BLOCK_SIZE / ATOM_SIZE)
-static_assert(ATOMS_PER_BLOCK % 64 == 0, "");
-#define BITFIELD_SIZE (ATOMS_PER_BLOCK / 8)
-#define BITFIELD_ELTS (BITFIELD_SIZE / 8)
-
-#define BLOCK_HEADER_SIZE (BITFIELD_SIZE + 2 * sizeof(void*) + sizeof(uint64_t))
-#define BLOCK_HEADER_ATOMS ((BLOCK_HEADER_SIZE + ATOM_SIZE - 1) / ATOM_SIZE)
-
-struct Atoms {
-    char _data[ATOM_SIZE];
-};
-
-struct Block {
-    union {
-        struct {
-            Block* next, **prev;
-            uint64_t size;
-            uint64_t isfree[BITFIELD_ELTS];
-        };
-        Atoms atoms[ATOMS_PER_BLOCK];
-    };
-
-    inline int minObjIndex() { return (BLOCK_HEADER_SIZE + size - 1) / size; }
-
-    inline int numObjects() { return BLOCK_SIZE / size; }
-
-    inline int atomsPerObj() { return size / ATOM_SIZE; }
-
-    static Block* forPointer(void* ptr) { return (Block*)((uintptr_t)ptr & ~(BLOCK_SIZE - 1)); }
-};
-static_assert(sizeof(Block) == BLOCK_SIZE, "bad size");
-
+// Sizes for small objects
 constexpr const size_t sizes[] = {
     16,  32,  48,  64,  80,  96,  112, 128,  160,  192,  224,  256,
     320, 384, 448, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048,
@@ -103,75 +68,86 @@ constexpr const size_t sizes[] = {
 };
 #define NUM_BUCKETS (sizeof(sizes) / sizeof(sizes[0]))
 
-class LargeObj;
-class Heap {
-private:
-    Block* heads[NUM_BUCKETS];
-    Block* full_heads[NUM_BUCKETS];
-    LargeObj* large_head = NULL;
+struct LargeObj {
+    LargeObj* next, **prev;
+    size_t obj_size;
+    GCAllocation data[0];
 
-    GCAllocation* __attribute__((__malloc__)) allocSmall(size_t rounded_size, int bucket_idx);
-    GCAllocation* __attribute__((__malloc__)) allocLarge(size_t bytes);
-
-    // DS_DEFINE_MUTEX(lock);
-    DS_DEFINE_SPINLOCK(lock);
-
-    struct ThreadBlockCache {
-        Heap* heap;
-        Block* cache_free_heads[NUM_BUCKETS];
-        Block* cache_full_heads[NUM_BUCKETS];
-
-        ThreadBlockCache(Heap* heap) : heap(heap) {
-            memset(cache_free_heads, 0, sizeof(cache_free_heads));
-            memset(cache_full_heads, 0, sizeof(cache_full_heads));
-        }
-        ~ThreadBlockCache();
-    };
-    friend class ThreadBlockCache;
-    // TODO only use thread caches if we're in GRWL mode?
-    threading::PerThreadSet<ThreadBlockCache, Heap*> thread_caches;
-
-public:
-    Heap() : thread_caches(this) {}
-
-    GCAllocation* realloc(GCAllocation* alloc, size_t bytes);
-
-    GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes) {
-        GCAllocation* rtn;
-        // assert(bytes >= 16);
-        if (bytes <= 16)
-            rtn = allocSmall(16, 0);
-        else if (bytes <= 32)
-            rtn = allocSmall(32, 1);
-        else if (bytes > sizes[NUM_BUCKETS - 1])
-            rtn = allocLarge(bytes);
-        else {
-            rtn = NULL;
-            for (int i = 2; i < NUM_BUCKETS; i++) {
-                if (sizes[i] >= bytes) {
-                    rtn = allocSmall(sizes[i], i);
-                    break;
-                }
-            }
-        }
-
-        return rtn;
+    int mmap_size() {
+        size_t total_size = obj_size + sizeof(LargeObj);
+        total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+        return total_size;
     }
 
-    void free(GCAllocation* alloc);
+    int capacity() {
+        return mmap_size() - sizeof(LargeObj);
+    }
 
-    // not thread safe:
-    GCAllocation* getAllocationFromInteriorPointer(void* ptr);
-    // not thread safe:
-    void freeUnmarked();
-
-    void dumpHeapStatistics();
+    static LargeObj* fromAllocation(GCAllocation* alloc) {
+        char* rtn = (char*)alloc - offsetof(LargeObj, data);
+        assert((uintptr_t)rtn % PAGE_SIZE == 0);
+        return reinterpret_cast<LargeObj*>(rtn);
+    }
 };
 
+// Segment of the nursery that can be allocated on
+class NurseryFragment {
+private:
+    void* start, *end;
+
+public:
+    NurseryFragment() : start(NULL), end(NULL) { }
+    NurseryFragment(void* start, void* end) : start(start), end(end) { }
+
+    bool canAllocate(size_t len) {
+        return start + len <= end;
+    }
+
+    void* allocate(size_t len) {
+        assert(canAllocate(len));
+        void* res = start;
+        start += len;
+        return res;
+    }
+
+    void* getStart() {
+        return start;
+    }
+};
+
+#define GC_FLAGS_MARKED 0x01
+#define GC_FLAGS_PINNED 0x02
+
+// MSB of the NurseryAllocation - distinguishes between 
+#define GC_FLAGS_EXISTS 0x80
+
+struct NurseryAllocation {
+    union {
+        void* fwd_ptr;
+        struct {
+            unsigned char gc_flags;
+            unsigned short len;
+        };
+    };
+    char user_data[0];
+};
+static_assert(sizeof(NurseryAllocation) == sizeof(void *), "bad NurseryAllocation size");
+static_assert(sizes[NUM_BUCKETS - 1] <= (1 << sizeof(short)), "size may not fit in short 'len' field");
+
+
+struct Heap {
+    LargeObj* large_head = NULL;
+
+    NurseryRoom nursery;
+    PerThreadSet<NurseryFragment*> threadFragments;
+};
+
+GCAllocation* __attribute__((__malloc__)) alloc(size_t bytes);
+
+GCAllocation* __attribute__((__malloc__)) allocSmall(size_t rounded_size, int bucket_idx);
+GCAllocation* __attribute__((__malloc__)) allocLarge(size_t bytes);
+
 extern Heap global_heap;
-void dumpHeapStatistics();
 
-} // namespace gc
-} // namespace pyston
-
-#endif
+}
+}
