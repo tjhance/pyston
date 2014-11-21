@@ -74,20 +74,28 @@ static_assert(sizeof(ArgPassSpec) <= sizeof(void*), "ArgPassSpec doesn't fit in 
 
 namespace gc {
 
-class TraceStack;
 class GCVisitor {
-private:
-    bool isValid(void* p);
-
 public:
-    TraceStack* stack;
-    GCVisitor(TraceStack* stack) : stack(stack) {}
+    void run_trace(const std::vector<void*>& roots);
 
-    // These all work on *user* pointers, ie pointers to the user_data section of GCAllocations
-    void visit(void* p);
-    void visitRange(void* const* start, void* const* end);
-    void visitPotential(void* p);
-    void visitPotentialRange(void* const* start, void* const* end);
+    // These all work on *user* pointers, i.e. pointers to the user_data section of GCAllocations
+    // Called by the gchandler methods
+    void visit(void** p);
+    void visitRange(void** start, void** end);
+    void visitPotential(void** p);
+    void visitPotentialRange(void** start, void** end);
+
+protected:
+    virtual void handle_nursery(GCAllocation *p) = 0;
+    virtual void handle_adult(GCAllocation *p) = 0;
+
+private:
+    void collectRoots(void* start, void* end);
+    void collectOtherThreadsStacks();
+    void collectLocalStack();
+    void collectStackRoots();
+
+    std::vector<void *> v;
 };
 
 } // namespace gc
