@@ -148,21 +148,21 @@ public:
 
     virtual void accept(ASTVisitor* v) = 0;
 
-    AST(AST_TYPE::AST_TYPE type) : type(type) {}
+    AST(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset) : type(type), lineno(lineno), col_offset(col_offset) {}
 };
 
 class AST_expr : public AST {
 public:
     virtual void* accept_expr(ExprVisitor* v) = 0;
 
-    AST_expr(AST_TYPE::AST_TYPE type) : AST(type) {}
+    AST_expr(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset) : AST(type, lineno, col_offset) {}
 };
 
 class AST_stmt : public AST {
 public:
     virtual void accept_stmt(StmtVisitor* v) = 0;
 
-    AST_stmt(AST_TYPE::AST_TYPE type) : AST(type) {}
+    AST_stmt(AST_TYPE::AST_TYPE type, uint32_t lineno, uint32_t col_offset) : AST(type, lineno, col_offset) {}
 };
 
 
@@ -173,7 +173,7 @@ public:
 
     virtual void accept(ASTVisitor* v);
 
-    AST_alias(const std::string& name, const std::string& asname) : AST(AST_TYPE::alias), name(name), asname(asname) {}
+    AST_alias(const std::string& name, const std::string& asname) : AST(AST_TYPE::alias, -1, -1), name(name), asname(asname) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::alias;
 };
@@ -189,7 +189,7 @@ public:
 
     virtual void accept(ASTVisitor* v);
 
-    AST_arguments() : AST(AST_TYPE::arguments) {}
+    AST_arguments() : AST(AST_TYPE::arguments, -1, -1) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::arguments;
 };
@@ -201,7 +201,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Assert() : AST_stmt(AST_TYPE::Assert) {}
+    AST_Assert(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Assert, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Assert;
 };
@@ -214,7 +214,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Assign() : AST_stmt(AST_TYPE::Assign) {}
+    AST_Assign(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Assign, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Assign;
 };
@@ -228,7 +228,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_AugAssign() : AST_stmt(AST_TYPE::AugAssign) {}
+    AST_AugAssign(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::AugAssign, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugAssign;
 };
@@ -241,7 +241,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_AugBinOp() : AST_expr(AST_TYPE::AugBinOp) {}
+    AST_AugBinOp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::AugBinOp, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugBinOp;
 };
@@ -255,7 +255,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
+    AST_Attribute(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Attribute, lineno, col_offset) {}
 
     AST_Attribute(AST_expr* value, AST_TYPE::AST_TYPE ctx_type, const std::string& attr)
         : AST_expr(AST_TYPE::Attribute), value(value), ctx_type(ctx_type), attr(attr) {}
@@ -271,7 +271,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_BinOp() : AST_expr(AST_TYPE::BinOp) {}
+    AST_BinOp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::BinOp, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::BinOp;
 };
@@ -284,7 +284,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_BoolOp() : AST_expr(AST_TYPE::BoolOp) {}
+    AST_BoolOp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::BoolOp, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::BoolOp;
 };
@@ -294,7 +294,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Break() : AST_stmt(AST_TYPE::Break) {}
+    AST_Break(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Break, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Break;
 };
@@ -308,7 +308,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Call() : AST_expr(AST_TYPE::Call) {}
+    AST_Call(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Call, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Call;
 };
@@ -322,7 +322,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Compare() : AST_expr(AST_TYPE::Compare) {}
+    AST_Compare(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Compare, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Compare;
 };
@@ -335,7 +335,7 @@ public:
 
     virtual void accept(ASTVisitor* v);
 
-    AST_comprehension() : AST(AST_TYPE::comprehension) {}
+    AST_comprehension(uint32_t lineno, uint32_t col_offset) : AST(AST_TYPE::comprehension, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::comprehension;
 };
@@ -349,7 +349,7 @@ public:
     std::vector<AST_stmt*> body;
     std::string name;
 
-    AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
+    AST_ClassDef(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::ClassDef, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClassDef;
 };
@@ -359,7 +359,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Continue() : AST_stmt(AST_TYPE::Continue) {}
+    AST_Continue(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Continue, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Continue;
 };
@@ -371,7 +371,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Dict() : AST_expr(AST_TYPE::Dict) {}
+    AST_Dict(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Dict, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Dict;
 };
@@ -384,7 +384,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_DictComp() : AST_expr(AST_TYPE::DictComp) {}
+    AST_DictComp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::DictComp, lineno, col_offset) {}
 
     const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::DictComp;
 };
@@ -395,7 +395,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Delete() : AST_stmt(AST_TYPE::Delete) {}
+    AST_Delete(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Delete, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
 };
@@ -405,7 +405,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Ellipsis() : AST_expr(AST_TYPE::Ellipsis) {}
+    AST_Ellipsis(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Ellipsis, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Ellipsis;
 };
@@ -417,7 +417,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Expr() : AST_stmt(AST_TYPE::Expr) {}
+    AST_Expr(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Expr, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expr;
 };
@@ -430,7 +430,7 @@ public:
 
     virtual void accept(ASTVisitor* v);
 
-    AST_ExceptHandler() : AST(AST_TYPE::ExceptHandler) {}
+    AST_ExceptHandler(uint32_t lineno, uint32_t col_offset) : AST(AST_TYPE::ExceptHandler, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExceptHandler;
 };
@@ -443,7 +443,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_ExtSlice() : AST_expr(AST_TYPE::ExtSlice) {}
+    AST_ExtSlice(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::ExtSlice, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExtSlice;
 };
@@ -456,7 +456,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_For() : AST_stmt(AST_TYPE::For) {}
+    AST_For(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::For, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::For;
 };
@@ -471,7 +471,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_FunctionDef() : AST_stmt(AST_TYPE::FunctionDef) {}
+    AST_FunctionDef(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::FunctionDef, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::FunctionDef;
 };
@@ -484,7 +484,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_GeneratorExp() : AST_expr(AST_TYPE::GeneratorExp) {}
+    AST_GeneratorExp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::GeneratorExp, lineno, col_offset) {}
 
     const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::GeneratorExp;
 };
@@ -496,7 +496,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Global() : AST_stmt(AST_TYPE::Global) {}
+    AST_Global(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Global, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Global;
 };
@@ -509,7 +509,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_If() : AST_stmt(AST_TYPE::If) {}
+    AST_If(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::If, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::If;
 };
@@ -521,7 +521,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_IfExp() : AST_expr(AST_TYPE::IfExp) {}
+    AST_IfExp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::IfExp, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::IfExp;
 };
@@ -533,7 +533,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Import() : AST_stmt(AST_TYPE::Import) {}
+    AST_Import(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Import, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Import;
 };
@@ -547,7 +547,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_ImportFrom() : AST_stmt(AST_TYPE::ImportFrom) {}
+    AST_ImportFrom(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::ImportFrom, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ImportFrom;
 };
@@ -559,7 +559,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Index() : AST_expr(AST_TYPE::Index) {}
+    AST_Index(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Index, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Index;
 };
@@ -572,7 +572,7 @@ public:
 
     virtual void accept(ASTVisitor* v);
 
-    AST_keyword() : AST(AST_TYPE::keyword) {}
+    AST_keyword(uint32_t lineno, uint32_t col_offset) : AST(AST_TYPE::keyword) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::keyword;
 };
@@ -585,7 +585,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Lambda() : AST_expr(AST_TYPE::Lambda) {}
+    AST_Lambda(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Lambda, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Lambda;
 };
@@ -598,7 +598,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_List() : AST_expr(AST_TYPE::List) {}
+    AST_List(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::List, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::List;
 };
@@ -611,7 +611,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_ListComp() : AST_expr(AST_TYPE::ListComp) {}
+    AST_ListComp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::ListComp, lineno, col_offset) {}
 
     const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::ListComp;
 };
@@ -623,7 +623,7 @@ public:
 
     virtual void accept(ASTVisitor* v);
 
-    AST_Module() : AST(AST_TYPE::Module) {}
+    AST_Module(uint32_t lineno, uint32_t col_offset) : AST(AST_TYPE::Module, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Module;
 };
@@ -636,7 +636,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Name() : AST_expr(AST_TYPE::Name) {}
+    AST_Name(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Name, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };
@@ -662,7 +662,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Num() : AST_expr(AST_TYPE::Num) {}
+    AST_Num(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Num, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Num;
 };
@@ -674,7 +674,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Repr() : AST_expr(AST_TYPE::Repr) {}
+    AST_Repr(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Repr, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Repr;
 };
@@ -684,7 +684,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Pass() : AST_stmt(AST_TYPE::Pass) {}
+    AST_Pass(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Pass, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Pass;
 };
@@ -698,7 +698,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Print() : AST_stmt(AST_TYPE::Print) {}
+    AST_Print(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Print, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Print;
 };
@@ -714,7 +714,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Raise() : AST_stmt(AST_TYPE::Raise), arg0(NULL), arg1(NULL), arg2(NULL) {}
+    AST_Raise(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Raise, lineno, col_offset), arg0(NULL), arg1(NULL), arg2(NULL) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Raise;
 };
@@ -726,7 +726,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Return() : AST_stmt(AST_TYPE::Return) {}
+    AST_Return(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Return, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Return;
 };
@@ -738,7 +738,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Set() : AST_expr(AST_TYPE::Set) {}
+    AST_Set(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Set, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Set;
 };
@@ -750,7 +750,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Slice() : AST_expr(AST_TYPE::Slice) {}
+    AST_Slice(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Slice, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Slice;
 };
@@ -767,9 +767,9 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Str() : AST_expr(AST_TYPE::Str) {}
-    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(s) {}
-    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(std::move(s)) {}
+    AST_Str(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Str, lineno, col_offset) {}
+    AST_Str(const std::string& s, uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Str, lineno, col_offset), str_type(STR), s(s) {}
+    AST_Str(const std::string&& s, uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Str, lineno, col_offset), str_type(STR), s(std::move(s)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };
@@ -782,7 +782,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Subscript() : AST_expr(AST_TYPE::Subscript) {}
+    AST_Subscript(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Subscript, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Subscript;
 };
@@ -795,7 +795,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_TryExcept() : AST_stmt(AST_TYPE::TryExcept) {}
+    AST_TryExcept(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::TryExcept, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::TryExcept;
 };
@@ -807,7 +807,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_TryFinally() : AST_stmt(AST_TYPE::TryFinally) {}
+    AST_TryFinally(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::TryFinally, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::TryFinally;
 };
@@ -820,7 +820,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Tuple() : AST_expr(AST_TYPE::Tuple) {}
+    AST_Tuple(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Tuple, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Tuple;
 };
@@ -833,7 +833,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_UnaryOp() : AST_expr(AST_TYPE::UnaryOp) {}
+    AST_UnaryOp(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::UnaryOp, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::UnaryOp;
 };
@@ -846,7 +846,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_While() : AST_stmt(AST_TYPE::While) {}
+    AST_While(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::While, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::While;
 };
@@ -859,7 +859,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_With() : AST_stmt(AST_TYPE::With) {}
+    AST_With(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::With, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::With;
 };
@@ -871,7 +871,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Yield() : AST_expr(AST_TYPE::Yield) {}
+    AST_Yield(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::Yield, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Yield;
 };
@@ -890,7 +890,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Branch() : AST_stmt(AST_TYPE::Branch) {}
+    AST_Branch() : AST_stmt(AST_TYPE::Branch, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Branch;
 };
@@ -902,10 +902,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Jump() : AST_stmt(AST_TYPE::Jump) {
-        lineno = -1;
-        col_offset = -1;
-    }
+    AST_Jump() : AST_stmt(AST_TYPE::Jump, -1, -1);
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Jump;
 };
@@ -918,7 +915,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_ClsAttribute() : AST_expr(AST_TYPE::ClsAttribute) {}
+    AST_ClsAttribute(uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::ClsAttribute, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClsAttribute;
 };
@@ -932,7 +929,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Invoke(AST_stmt* stmt) : AST_stmt(AST_TYPE::Invoke), stmt(stmt) {}
+    AST_Invoke(AST_stmt* stmt, uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Invoke, lineno, col_offset), stmt(stmt) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Invoke;
 };
@@ -959,7 +956,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_LangPrimitive(Opcodes opcode) : AST_expr(AST_TYPE::LangPrimitive), opcode(opcode) {}
+    AST_LangPrimitive(Opcodes opcode, uint32_t lineno, uint32_t col_offset) : AST_expr(AST_TYPE::LangPrimitive, lineno, col_offset), opcode(opcode) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::LangPrimitive;
 };
@@ -969,7 +966,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Unreachable() : AST_stmt(AST_TYPE::Unreachable) {}
+    AST_Unreachable(uint32_t lineno, uint32_t col_offset) : AST_stmt(AST_TYPE::Unreachable, lineno, col_offset) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Unreachable;
 };

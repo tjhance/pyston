@@ -141,6 +141,9 @@ private:
         return makeCall(makeLoadAttribute(name, "append", true), elt);
     }
 
+    // AST_DictComp -> AST_Dict
+    // AST_ListComp -> AST_List
+    // AST_SetComp -> AST_Set
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
         std::string rtn_name = nodeName(node);
         pushAssign(rtn_name, new ResultASTType());
@@ -157,7 +160,7 @@ private:
             bool is_innermost = (i == n - 1);
 
             AST_expr* remapped_iter = remapExpr(c->iter);
-            AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
+            AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER, node->line, node->col);
             iter_call->args.push_back(remapped_iter);
             std::string iter_name = nodeName(node, "lc_iter", i);
             pushAssign(iter_name, iter_call);
@@ -170,7 +173,6 @@ private:
 
             CFGBlock* test_block = cfg->addBlock();
             test_block->info = "comprehension_test";
-            // printf("Test block for comp %d is %d\n", i, test_block->idx);
 
             j = new AST_Jump();
             j->target = test_block;
@@ -185,7 +187,6 @@ private:
             CFGBlock* exit_block = cfg->addDeferredBlock();
             exit_block->info = "comprehension_exit";
             exit_blocks.push_back(exit_block);
-            // printf("Body block for comp %d is %d\n", i, body_block->idx);
 
             AST_Branch* br = new AST_Branch();
             br->col_offset = node->col_offset;
@@ -211,10 +212,8 @@ private:
                 // Put this below the entire body?
                 CFGBlock* body_tramp = cfg->addBlock();
                 body_tramp->info = "comprehension_if_trampoline";
-                // printf("body_tramp for %d is %d\n", i, body_tramp->idx);
                 CFGBlock* body_continue = cfg->addBlock();
                 body_continue->info = "comprehension_if_continue";
-                // printf("body_continue for %d is %d\n", i, body_continue->idx);
 
                 br->iffalse = body_tramp;
                 curblock->connectTo(body_tramp);
