@@ -86,6 +86,7 @@ public:
 AST* readASTMisc(BufferedReader* reader);
 AST_expr* readASTExpr(BufferedReader* reader);
 AST_stmt* readASTStmt(BufferedReader* reader);
+AST_slice* readASTSlice(BufferedReader* reader);
 
 static std::string readString(BufferedReader* reader) {
     int strlen = reader->readShort();
@@ -141,13 +142,17 @@ static int readColOffset(BufferedReader* reader) {
     return rtn;
 }
 
+static SourcePos readSourcePos(BufferedReader* reader) {
+    int lineno = reader->readULL();
+    int col_offset = readColOffset(reader);
+    return SourcePos(lineno, col_offset);
+}
+
 AST_alias* read_alias(BufferedReader* reader) {
     std::string asname = readString(reader);
     std::string name = readString(reader);
 
     AST_alias* rtn = new AST_alias(name, asname);
-    rtn->col_offset = -1;
-    rtn->lineno = -1;
 
     return rtn;
 }
@@ -158,39 +163,31 @@ AST_arguments* read_arguments(BufferedReader* reader) {
     AST_arguments* rtn = new AST_arguments();
 
     readExprVector(rtn->args, reader);
-    rtn->col_offset = -1;
     readExprVector(rtn->defaults, reader);
     rtn->kwarg = readString(reader);
-    rtn->lineno = -1;
     rtn->vararg = readString(reader);
     return rtn;
 }
 
 AST_Assert* read_assert(BufferedReader* reader) {
-    AST_Assert* rtn = new AST_Assert();
+    AST_Assert* rtn = new AST_Assert(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->msg = readASTExpr(reader);
     rtn->test = readASTExpr(reader);
     return rtn;
 }
 
 AST_Assign* read_assign(BufferedReader* reader) {
-    AST_Assign* rtn = new AST_Assign();
+    AST_Assign* rtn = new AST_Assign(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     readExprVector(rtn->targets, reader);
     rtn->value = readASTExpr(reader);
     return rtn;
 }
 
 AST_AugAssign* read_augassign(BufferedReader* reader) {
-    AST_AugAssign* rtn = new AST_AugAssign();
+    AST_AugAssign* rtn = new AST_AugAssign(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->op_type = (AST_TYPE::AST_TYPE)reader->readByte();
     rtn->target = readASTExpr(reader);
     rtn->value = readASTExpr(reader);
@@ -198,22 +195,18 @@ AST_AugAssign* read_augassign(BufferedReader* reader) {
 }
 
 AST_Attribute* read_attribute(BufferedReader* reader) {
-    AST_Attribute* rtn = new AST_Attribute();
+    AST_Attribute* rtn = new AST_Attribute(readSourcePos(reader));
 
     rtn->attr = readString(reader);
-    rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
-    rtn->lineno = reader->readULL();
     rtn->value = readASTExpr(reader);
     return rtn;
 }
 
 AST_expr* read_binop(BufferedReader* reader) {
-    AST_BinOp* rtn = new AST_BinOp();
+    AST_BinOp* rtn = new AST_BinOp(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->left = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
     rtn->op_type = (AST_TYPE::AST_TYPE)reader->readByte();
     rtn->right = readASTExpr(reader);
 
@@ -221,10 +214,8 @@ AST_expr* read_binop(BufferedReader* reader) {
 }
 
 AST_expr* read_boolop(BufferedReader* reader) {
-    AST_BoolOp* rtn = new AST_BoolOp();
+    AST_BoolOp* rtn = new AST_BoolOp(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->op_type = (AST_TYPE::AST_TYPE)reader->readByte();
     readExprVector(rtn->values, reader);
 
@@ -232,36 +223,29 @@ AST_expr* read_boolop(BufferedReader* reader) {
 }
 
 AST_Break* read_break(BufferedReader* reader) {
-    AST_Break* rtn = new AST_Break();
-
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
+    AST_Break* rtn = new AST_Break(readSourcePos(reader));
 
     return rtn;
 }
 
 AST_Call* read_call(BufferedReader* reader) {
-    AST_Call* rtn = new AST_Call();
+    AST_Call* rtn = new AST_Call(readSourcePos(reader));
 
     readExprVector(rtn->args, reader);
-    rtn->col_offset = readColOffset(reader);
     rtn->func = readASTExpr(reader);
 
     readMiscVector(rtn->keywords, reader);
 
     rtn->kwargs = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
     rtn->starargs = readASTExpr(reader);
     return rtn;
 }
 
 AST_expr* read_compare(BufferedReader* reader) {
-    AST_Compare* rtn = new AST_Compare();
+    AST_Compare* rtn = new AST_Compare(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->comparators, reader);
     rtn->left = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
 
     int num_ops = reader->readShort();
     assert(num_ops == rtn->comparators.size());
@@ -279,50 +263,38 @@ AST_comprehension* read_comprehension(BufferedReader* reader) {
     rtn->iter = readASTExpr(reader);
     rtn->target = readASTExpr(reader);
 
-    rtn->col_offset = -1;
-    rtn->lineno = -1;
-
     return rtn;
 }
 
 AST_ClassDef* read_classdef(BufferedReader* reader) {
-    AST_ClassDef* rtn = new AST_ClassDef();
+    AST_ClassDef* rtn = new AST_ClassDef(readSourcePos(reader));
 
     readExprVector(rtn->bases, reader);
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->decorator_list, reader);
-    rtn->lineno = reader->readULL();
     rtn->name = readString(reader);
 
     return rtn;
 }
 
 AST_Continue* read_continue(BufferedReader* reader) {
-    AST_Continue* rtn = new AST_Continue();
-
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
+    AST_Continue* rtn = new AST_Continue(readSourcePos(reader));
 
     return rtn;
 }
 
 AST_Delete* read_delete(BufferedReader* reader) {
-    AST_Delete* rtn = new AST_Delete();
+    AST_Delete* rtn = new AST_Delete(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     readExprVector(rtn->targets, reader);
 
     return rtn;
 }
 
 AST_Dict* read_dict(BufferedReader* reader) {
-    AST_Dict* rtn = new AST_Dict();
+    AST_Dict* rtn = new AST_Dict(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->keys, reader);
-    rtn->lineno = reader->readULL();
     readExprVector(rtn->values, reader);
 
     assert(rtn->keys.size() == rtn->values.size());
@@ -330,22 +302,18 @@ AST_Dict* read_dict(BufferedReader* reader) {
 }
 
 AST_DictComp* read_dictcomp(BufferedReader* reader) {
-    AST_DictComp* rtn = new AST_DictComp();
-    rtn->col_offset = readColOffset(reader);
+    AST_DictComp* rtn = new AST_DictComp(readSourcePos(reader));
     readMiscVector(rtn->generators, reader);
     rtn->key = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
     rtn->value = readASTExpr(reader);
     return rtn;
 }
 
 
 AST_ExceptHandler* read_excepthandler(BufferedReader* reader) {
-    AST_ExceptHandler* rtn = new AST_ExceptHandler();
+    AST_ExceptHandler* rtn = new AST_ExceptHandler(readSourcePos(reader));
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->name = readASTExpr(reader);
     rtn->type = readASTExpr(reader);
 
@@ -353,21 +321,17 @@ AST_ExceptHandler* read_excepthandler(BufferedReader* reader) {
 }
 
 AST_Expr* read_expr(BufferedReader* reader) {
-    AST_Expr* rtn = new AST_Expr();
+    AST_Expr* rtn = new AST_Expr(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->value = readASTExpr(reader);
     return rtn;
 }
 
 AST_For* read_for(BufferedReader* reader) {
-    AST_For* rtn = new AST_For();
+    AST_For* rtn = new AST_For(readSourcePos(reader));
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
     rtn->iter = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
     readStmtVector(rtn->orelse, reader);
     rtn->target = readASTExpr(reader);
     return rtn;
@@ -376,73 +340,59 @@ AST_For* read_for(BufferedReader* reader) {
 AST_FunctionDef* read_functiondef(BufferedReader* reader) {
     if (VERBOSITY("parsing") >= 2)
         printf("reading functiondef\n");
-    AST_FunctionDef* rtn = new AST_FunctionDef();
+    AST_FunctionDef* rtn = new AST_FunctionDef(readSourcePos(reader));
 
     rtn->args = ast_cast<AST_arguments>(readASTMisc(reader));
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->decorator_list, reader);
-    rtn->lineno = reader->readULL();
     rtn->name = readString(reader);
     return rtn;
 }
 
 AST_GeneratorExp* read_generatorexp(BufferedReader* reader) {
-    AST_GeneratorExp* rtn = new AST_GeneratorExp();
+    AST_GeneratorExp* rtn = new AST_GeneratorExp(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->elt = readASTExpr(reader);
     readMiscVector(rtn->generators, reader);
-    rtn->lineno = reader->readULL();
     return rtn;
 }
 
 AST_Global* read_global(BufferedReader* reader) {
-    AST_Global* rtn = new AST_Global();
+    AST_Global* rtn = new AST_Global(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     readStringVector(rtn->names, reader);
     return rtn;
 }
 
 AST_If* read_if(BufferedReader* reader) {
-    AST_If* rtn = new AST_If();
+    AST_If* rtn = new AST_If(readSourcePos(reader));
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     readStmtVector(rtn->orelse, reader);
     rtn->test = readASTExpr(reader);
     return rtn;
 }
 
 AST_IfExp* read_ifexp(BufferedReader* reader) {
-    AST_IfExp* rtn = new AST_IfExp();
+    AST_IfExp* rtn = new AST_IfExp(readSourcePos(reader));
 
     rtn->body = readASTExpr(reader);
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->orelse = readASTExpr(reader);
     rtn->test = readASTExpr(reader);
     return rtn;
 }
 
 AST_Import* read_import(BufferedReader* reader) {
-    AST_Import* rtn = new AST_Import();
+    AST_Import* rtn = new AST_Import(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     readMiscVector(rtn->names, reader);
     return rtn;
 }
 
 AST_ImportFrom* read_importfrom(BufferedReader* reader) {
-    AST_ImportFrom* rtn = new AST_ImportFrom();
+    AST_ImportFrom* rtn = new AST_ImportFrom(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->level = reader->readULL();
-    rtn->lineno = reader->readULL();
     rtn->module = readString(reader);
     readMiscVector(rtn->names, reader);
     return rtn;
@@ -451,8 +401,6 @@ AST_ImportFrom* read_importfrom(BufferedReader* reader) {
 AST_Index* read_index(BufferedReader* reader) {
     AST_Index* rtn = new AST_Index();
 
-    rtn->col_offset = -1;
-    rtn->lineno = -1;
     rtn->value = readASTExpr(reader);
     assert(rtn->value);
     return rtn;
@@ -462,39 +410,31 @@ AST_keyword* read_keyword(BufferedReader* reader) {
     AST_keyword* rtn = new AST_keyword();
 
     rtn->arg = readString(reader);
-    rtn->col_offset = -1;
-    rtn->lineno = -1;
     rtn->value = readASTExpr(reader);
     return rtn;
 }
 
 AST_Lambda* read_lambda(BufferedReader* reader) {
-    AST_Lambda* rtn = new AST_Lambda();
+    AST_Lambda* rtn = new AST_Lambda(readSourcePos(reader));
 
     rtn->args = ast_cast<AST_arguments>(readASTMisc(reader));
     rtn->body = readASTExpr(reader);
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     return rtn;
 }
 
 AST_List* read_list(BufferedReader* reader) {
-    AST_List* rtn = new AST_List();
+    AST_List* rtn = new AST_List(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
     readExprVector(rtn->elts, reader);
-    rtn->lineno = reader->readULL();
     return rtn;
 }
 
 AST_ListComp* read_listcomp(BufferedReader* reader) {
-    AST_ListComp* rtn = new AST_ListComp();
+    AST_ListComp* rtn = new AST_ListComp(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->elt = readASTExpr(reader);
     readMiscVector(rtn->generators, reader);
-    rtn->lineno = reader->readULL();
     return rtn;
 }
 
@@ -504,28 +444,21 @@ AST_Module* read_module(BufferedReader* reader) {
     AST_Module* rtn = new AST_Module();
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = -1;
-    rtn->lineno = -1;
     return rtn;
 }
 
 AST_Name* read_name(BufferedReader* reader) {
-    AST_Name* rtn = new AST_Name();
+    AST_Name* rtn = new AST_Name(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
     rtn->id = readString(reader);
-    rtn->lineno = reader->readULL();
     return rtn;
 }
 
 AST_Num* read_num(BufferedReader* reader) {
-    AST_Num* rtn = new AST_Num();
+    AST_Num* rtn = new AST_Num(readSourcePos(reader));
 
     rtn->num_type = (AST_Num::NumType)reader->readByte();
-
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
 
     if (rtn->num_type == AST_Num::INT) {
         rtn->n_int = reader->readULL(); // automatic conversion to signed
@@ -542,61 +475,49 @@ AST_Num* read_num(BufferedReader* reader) {
 }
 
 AST_Repr* read_repr(BufferedReader* reader) {
-    AST_Repr* rtn = new AST_Repr();
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
+    AST_Repr* rtn = new AST_Repr(readSourcePos(reader));
     rtn->value = readASTExpr(reader);
 
     return rtn;
 }
 
 AST_Pass* read_pass(BufferedReader* reader) {
-    AST_Pass* rtn = new AST_Pass();
+    AST_Pass* rtn = new AST_Pass(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     return rtn;
 }
 
 AST_Print* read_print(BufferedReader* reader) {
-    AST_Print* rtn = new AST_Print();
+    AST_Print* rtn = new AST_Print(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->dest = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
     rtn->nl = reader->readByte();
     readExprVector(rtn->values, reader);
     return rtn;
 }
 
 AST_Raise* read_raise(BufferedReader* reader) {
-    AST_Raise* rtn = new AST_Raise();
+    AST_Raise* rtn = new AST_Raise(readSourcePos(reader));
 
     // "arg0" "arg1" "arg2" are called "type", "inst", and "tback" in the python ast,
     // so that's the order we have to read them:
-    rtn->col_offset = readColOffset(reader);
     rtn->arg1 /*inst*/ = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
     rtn->arg2 /*tback*/ = readASTExpr(reader);
     rtn->arg0 /*type*/ = readASTExpr(reader);
     return rtn;
 }
 
 AST_Return* read_return(BufferedReader* reader) {
-    AST_Return* rtn = new AST_Return();
+    AST_Return* rtn = new AST_Return(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->value = readASTExpr(reader);
     return rtn;
 }
 
 AST_Set* read_set(BufferedReader* reader) {
-    AST_Set* rtn = new AST_Set();
+    AST_Set* rtn = new AST_Set(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     readExprVector(rtn->elts, reader);
-    rtn->lineno = reader->readULL();
 
     return rtn;
 }
@@ -604,8 +525,6 @@ AST_Set* read_set(BufferedReader* reader) {
 AST_Slice* read_slice(BufferedReader* reader) {
     AST_Slice* rtn = new AST_Slice();
 
-    rtn->col_offset = -1;
-    rtn->lineno = -1;
     rtn->lower = readASTExpr(reader);
     rtn->step = readASTExpr(reader);
     rtn->upper = readASTExpr(reader);
@@ -614,12 +533,9 @@ AST_Slice* read_slice(BufferedReader* reader) {
 }
 
 AST_Str* read_str(BufferedReader* reader) {
-    AST_Str* rtn = new AST_Str();
+    AST_Str* rtn = new AST_Str(readSourcePos(reader));
 
     rtn->str_type = (AST_Str::StrType)reader->readByte();
-
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
 
     if (rtn->str_type == AST_Str::STR) {
         rtn->s = readString(reader);
@@ -636,54 +552,44 @@ AST_Str* read_str(BufferedReader* reader) {
 }
 
 AST_Subscript* read_subscript(BufferedReader* reader) {
-    AST_Subscript* rtn = new AST_Subscript();
+    AST_Subscript* rtn = new AST_Subscript(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
-    rtn->lineno = reader->readULL();
-    rtn->slice = readASTExpr(reader);
+    rtn->slice = readASTSlice(reader);
     rtn->value = readASTExpr(reader);
 
     return rtn;
 }
 
 AST_TryExcept* read_tryexcept(BufferedReader* reader) {
-    AST_TryExcept* rtn = new AST_TryExcept();
+    AST_TryExcept* rtn = new AST_TryExcept(readSourcePos(reader));
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
     readMiscVector(rtn->handlers, reader);
-    rtn->lineno = reader->readULL();
     readStmtVector(rtn->orelse, reader);
     return rtn;
 }
 
 AST_TryFinally* read_tryfinally(BufferedReader* reader) {
-    AST_TryFinally* rtn = new AST_TryFinally();
+    AST_TryFinally* rtn = new AST_TryFinally(readSourcePos(reader));
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
     readStmtVector(rtn->finalbody, reader);
-    rtn->lineno = reader->readULL();
     return rtn;
 }
 
 AST_Tuple* read_tuple(BufferedReader* reader) {
-    AST_Tuple* rtn = new AST_Tuple();
+    AST_Tuple* rtn = new AST_Tuple(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
     rtn->ctx_type = (AST_TYPE::AST_TYPE)reader->readByte();
     readExprVector(rtn->elts, reader);
-    rtn->lineno = reader->readULL();
 
     return rtn;
 }
 
 AST_UnaryOp* read_unaryop(BufferedReader* reader) {
-    AST_UnaryOp* rtn = new AST_UnaryOp();
+    AST_UnaryOp* rtn = new AST_UnaryOp(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->op_type = (AST_TYPE::AST_TYPE)reader->readByte();
     rtn->operand = readASTExpr(reader);
 
@@ -691,11 +597,9 @@ AST_UnaryOp* read_unaryop(BufferedReader* reader) {
 }
 
 AST_While* read_while(BufferedReader* reader) {
-    AST_While* rtn = new AST_While();
+    AST_While* rtn = new AST_While(readSourcePos(reader));
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     readStmtVector(rtn->orelse, reader);
     rtn->test = readASTExpr(reader);
 
@@ -703,22 +607,18 @@ AST_While* read_while(BufferedReader* reader) {
 }
 
 AST_With* read_with(BufferedReader* reader) {
-    AST_With* rtn = new AST_With();
+    AST_With* rtn = new AST_With(readSourcePos(reader));
 
     readStmtVector(rtn->body, reader);
-    rtn->col_offset = readColOffset(reader);
     rtn->context_expr = readASTExpr(reader);
-    rtn->lineno = reader->readULL();
     rtn->optional_vars = readASTExpr(reader);
 
     return rtn;
 }
 
 AST_Yield* read_yield(BufferedReader* reader) {
-    AST_Yield* rtn = new AST_Yield();
+    AST_Yield* rtn = new AST_Yield(readSourcePos(reader));
 
-    rtn->col_offset = readColOffset(reader);
-    rtn->lineno = reader->readULL();
     rtn->value = readASTExpr(reader);
 
     return rtn;
@@ -753,8 +653,6 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_generatorexp(reader);
         case AST_TYPE::IfExp:
             return read_ifexp(reader);
-        case AST_TYPE::Index:
-            return read_index(reader);
         case AST_TYPE::Lambda:
             return read_lambda(reader);
         case AST_TYPE::List:
@@ -769,8 +667,6 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_repr(reader);
         case AST_TYPE::Set:
             return read_set(reader);
-        case AST_TYPE::Slice:
-            return read_slice(reader);
         case AST_TYPE::Str:
             return read_str(reader);
         case AST_TYPE::Subscript:
@@ -783,6 +679,28 @@ AST_expr* readASTExpr(BufferedReader* reader) {
             return read_yield(reader);
         default:
             fprintf(stderr, "Unknown expr node type (parser.cpp:" STRINGIFY(__LINE__) "): %d\n", type);
+            abort();
+            break;
+    }
+}
+
+AST_slice* readASTSlice(BufferedReader* reader) {
+    uint8_t type = reader->readByte();
+    if (VERBOSITY("parsing") >= 2)
+        printf("type = %d\n", type);
+    if (type == 0)
+        return NULL;
+
+    uint8_t checkbyte = reader->readByte();
+    assert(checkbyte == 0xae);
+
+    switch (type) {
+        case AST_TYPE::Slice:
+            return read_slice(reader);
+        case AST_TYPE::Index:
+            return read_index(reader);
+        default:
+            fprintf(stderr, "Unknown slice node type (parser.cpp:" STRINGIFY(__LINE__) "): %d\n", type);
             abort();
             break;
     }

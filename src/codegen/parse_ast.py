@@ -131,15 +131,20 @@ def convert(n, f):
         else:
             raise Exception(type(n.s))
 
-    # print >>sys.stderr, n, sorted(n.__dict__.items())
+    items = sorted(n.__dict__.items())
+    if 'lineno' in items or 'col_offset' in items:
+        # Move lineno and col_offset to the beginning
+        assert 'lineno' in items
+        assert 'col_offset' in items
+        items = [('lineno', items['lineno']), ('col_offset', items['col_offset'])] \
+                 + [(k,v) for (k,v) in items if k not in ('lineno', 'col_offset')]
+
     for k, v in sorted(n.__dict__.items()):
         if k.startswith('_'):
             continue
 
         if k in ("vararg", "kwarg", "asname", "module") and v is None:
             v = ""
-        # elif k in ('col_offset', 'lineno'):
-            # continue
 
         if isinstance(v, list):
             assert len(v) < 2**16

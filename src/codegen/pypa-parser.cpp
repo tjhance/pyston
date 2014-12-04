@@ -35,9 +35,8 @@ bool string_to_double(String const& s, double& result);
 
 namespace pyston {
 
-void location(AST* t, pypa::Ast& a) {
-    t->lineno = a.line;
-    t->col_offset = a.column;
+static SourcePos sourcePos(pypa::Ast& a) {
+    return SourcePos(a.line, a.column);
 }
 
 AST_expr* readItem(pypa::AstExpression& e);
@@ -179,7 +178,6 @@ std::string readName(pypa::AstExpr& n) {
 
 AST_keyword* readItem(pypa::AstKeyword& k) {
     AST_keyword* ptr = new AST_keyword();
-    location(ptr, k);
     ptr->arg = readName(k.name);
     ptr->value = readItem(k.value);
     return ptr;
@@ -254,8 +252,7 @@ void readVector(std::vector<AST_stmt*>& t, pypa::AstStmt u) {
 }
 
 AST_ExceptHandler* readItem(pypa::AstExcept& e) {
-    AST_ExceptHandler* ptr = new AST_ExceptHandler();
-    location(ptr, e);
+    AST_ExceptHandler* ptr = new AST_ExceptHandler(sourcePos(e));
     readVector(ptr->body, e.body);
     ptr->name = readItem(e.name);
     ptr->type = readItem(e.type);
@@ -273,7 +270,6 @@ AST_alias* readItem(pypa::AstAlias& a) {
 
 AST_arguments* readItem(pypa::AstArguments& a) {
     AST_arguments* ptr = new AST_arguments();
-    location(ptr, a);
     readVector(ptr->defaults, a.defaults);
     ptr->defaults.erase(std::remove(ptr->defaults.begin(), ptr->defaults.end(), nullptr), ptr->defaults.end());
     readVector(ptr->args, a.arguments);
@@ -302,8 +298,7 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstAttribute& a) {
-        AST_Attribute* ptr = new AST_Attribute();
-        location(ptr, a);
+        AST_Attribute* ptr = new AST_Attribute(sourcePos(a));
         ptr->value = readItem(a.value);
         ptr->attr = readName(a.attribute);
         ptr->ctx_type = readItem(a.context);
@@ -311,16 +306,14 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstBoolOp& b) {
-        AST_BoolOp* ptr = new AST_BoolOp();
-        location(ptr, b);
+        AST_BoolOp* ptr = new AST_BoolOp(sourcePos(b));
         ptr->op_type = readItem(b.op);
         readVector(ptr->values, b.values);
         return ptr;
     }
 
     ResultPtr read(pypa::AstBinOp& b) {
-        AST_BinOp* ptr = new AST_BinOp();
-        location(ptr, b);
+        AST_BinOp* ptr = new AST_BinOp(sourcePos(b));
         ptr->op_type = readItem(b.op);
         ptr->left = readItem(b.left);
         ptr->right = readItem(b.right);
@@ -328,8 +321,7 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstCall& c) {
-        AST_Call* ptr = new AST_Call();
-        location(ptr, c);
+        AST_Call* ptr = new AST_Call(sourcePos(c));
         readVector(ptr->args, c.arglist.arguments);
         readVector(ptr->keywords, c.arglist.keywords);
         ptr->func = readItem(c.function);
@@ -339,8 +331,7 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstCompare& c) {
-        AST_Compare* ptr = new AST_Compare();
-        location(ptr, c);
+        AST_Compare* ptr = new AST_Compare(sourcePos(c));
         ptr->left = readItem(c.left);
         ptr->ops.reserve(c.operators.size());
         for (auto op : c.operators) {
@@ -351,7 +342,7 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstComplex& c) {
-        AST_Num* ptr = new AST_Num();
+        AST_Num* ptr = new AST_Num(sourcePos(c));
         ptr->num_type = AST_Num::COMPLEX;
         pypa::string_to_double(c.imag, ptr->n_float);
         return ptr;
@@ -363,38 +354,22 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstDict& d) {
-        AST_Dict* ptr = new AST_Dict();
-        location(ptr, d);
+        AST_Dict* ptr = new AST_Dict(sourcePos(d));
         readVector(ptr->keys, d.keys);
         readVector(ptr->values, d.values);
         return ptr;
     }
 
     ResultPtr read(pypa::AstDictComp& d) {
-        AST_DictComp* ptr = new AST_DictComp();
-        location(ptr, d);
+        AST_DictComp* ptr = new AST_DictComp(sourcePos(d));
         ptr->key = readItem(d.key);
         ptr->value = readItem(d.value);
         readVector(ptr->generators, d.generators);
         return ptr;
     }
 
-    ResultPtr read(pypa::AstEllipsis& e) {
-        AST_Ellipsis* ptr = new AST_Ellipsis();
-        location(ptr, e);
-        return ptr;
-    }
-
-    ResultPtr read(pypa::AstExtSlice& e) {
-        AST_ExtSlice* ptr = new AST_ExtSlice();
-        location(ptr, e);
-        readVector(ptr->dims, e.dims);
-        return ptr;
-    }
-
     ResultPtr read(pypa::AstIfExpr& i) {
-        AST_IfExp* ptr = new AST_IfExp();
-        location(ptr, i);
+        AST_IfExp* ptr = new AST_IfExp(sourcePos(i));
         ptr->body = readItem(i.body);
         ptr->test = readItem(i.test);
         ptr->orelse = readItem(i.orelse);
@@ -402,63 +377,49 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstGenerator& g) {
-        AST_GeneratorExp* ptr = new AST_GeneratorExp();
-        location(ptr, g);
+        AST_GeneratorExp* ptr = new AST_GeneratorExp(sourcePos(g));
         ptr->elt = readItem(g.element);
         readVector(ptr->generators, g.generators);
         return ptr;
     }
 
-    ResultPtr read(pypa::AstIndex& i) {
-        AST_Index* ptr = new AST_Index();
-        location(ptr, i);
-        ptr->value = readItem(i.value);
-        return ptr;
-    }
-
     ResultPtr read(pypa::AstLambda& l) {
-        AST_Lambda* ptr = new AST_Lambda();
-        location(ptr, l);
+        AST_Lambda* ptr = new AST_Lambda(sourcePos(l));
         ptr->args = readItem(l.arguments);
         ptr->body = readItem(l.body);
         return ptr;
     }
 
     ResultPtr read(pypa::AstList& l) {
-        AST_List* ptr = new AST_List();
-        location(ptr, l);
+        AST_List* ptr = new AST_List(sourcePos(l));
         readVector(ptr->elts, l.elements);
         ptr->ctx_type = readItem(l.context);
         return ptr;
     }
 
     ResultPtr read(pypa::AstListComp& l) {
-        AST_ListComp* ptr = new AST_ListComp();
-        location(ptr, l);
+        AST_ListComp* ptr = new AST_ListComp(sourcePos(l));
         readVector(ptr->generators, l.generators);
         ptr->elt = readItem(l.element);
         return ptr;
     }
 
     ResultPtr read(pypa::AstName& a) {
-        AST_Name* ptr = new AST_Name();
-        location(ptr, a);
+        AST_Name* ptr = new AST_Name(sourcePos(a));
         ptr->ctx_type = readItem(a.context);
         ptr->id = a.id;
         return ptr;
     }
 
     ResultPtr read(pypa::AstNone& n) {
-        AST_Name* ptr = new AST_Name();
-        location(ptr, n);
+        AST_Name* ptr = new AST_Name(sourcePos(n));
         ptr->ctx_type = AST_TYPE::Load;
         ptr->id = "None";
         return ptr;
     }
 
     ResultPtr read(pypa::AstNumber& c) {
-        AST_Num* ptr = new AST_Num();
-        location(ptr, c);
+        AST_Num* ptr = new AST_Num(sourcePos(c));
         switch (c.num_type) {
             case pypa::AstNumber::Float:
                 ptr->num_type = AST_Num::FLOAT;
@@ -477,38 +438,25 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstRepr& r) {
-        AST_Repr* ptr = new AST_Repr();
-        location(ptr, r);
+        AST_Repr* ptr = new AST_Repr(sourcePos(r));
         ptr->value = readItem(r.value);
         return ptr;
     }
 
     ResultPtr read(pypa::AstSet& s) {
-        AST_Set* ptr = new AST_Set();
-        location(ptr, s);
+        AST_Set* ptr = new AST_Set(sourcePos(s));
         readVector(ptr->elts, s.elements);
         return ptr;
     }
 
-    ResultPtr read(pypa::AstSlice& s) {
-        AST_Slice* ptr = new AST_Slice();
-        location(ptr, s);
-        ptr->lower = readItem(s.lower);
-        ptr->upper = readItem(s.upper);
-        ptr->step = readItem(s.step);
-        return ptr;
-    }
-
     ResultPtr read(pypa::AstStr& s) {
-        AST_Str* ptr = new AST_Str();
-        location(ptr, s);
+        AST_Str* ptr = new AST_Str(sourcePos(s));
         ptr->s = s.value;
         return ptr;
     }
 
     ResultPtr read(pypa::AstSubscript& s) {
-        AST_Subscript* ptr = new AST_Subscript();
-        location(ptr, s);
+        AST_Subscript* ptr = new AST_Subscript(sourcePos(s));
         ptr->value = readItem(s.value);
         ptr->ctx_type = readItem(s.context);
         ptr->slice = readItem(s.slice);
@@ -516,24 +464,21 @@ struct expr_dispatcher {
     }
 
     ResultPtr read(pypa::AstTuple& t) {
-        AST_Tuple* ptr = new AST_Tuple();
-        location(ptr, t);
+        AST_Tuple* ptr = new AST_Tuple(sourcePos(t));
         readVector(ptr->elts, t.elements);
         ptr->ctx_type = readItem(t.context);
         return ptr;
     }
 
     ResultPtr read(pypa::AstUnaryOp& b) {
-        AST_UnaryOp* ptr = new AST_UnaryOp();
-        location(ptr, b);
+        AST_UnaryOp* ptr = new AST_UnaryOp(sourcePos(b));
         ptr->op_type = readItem(b.op);
         ptr->operand = readItem(b.operand);
         return ptr;
     }
 
     ResultPtr read(pypa::AstYieldExpr& e) {
-        AST_Yield* ptr = new AST_Yield();
-        location(ptr, e);
+        AST_Yield* ptr = new AST_Yield(sourcePos(e));
         ptr->value = readItem(e.args);
         return ptr;
     }
@@ -559,24 +504,21 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstAssign& a) {
-        AST_Assign* ptr = new AST_Assign();
-        location(ptr, a);
+        AST_Assign* ptr = new AST_Assign(sourcePos(a));
         readVector(ptr->targets, a.targets);
         ptr->value = readItem(a.value);
         return ptr;
     }
 
     ResultPtr read(pypa::AstAssert& a) {
-        AST_Assert* ptr = new AST_Assert();
-        location(ptr, a);
+        AST_Assert* ptr = new AST_Assert(sourcePos(a));
         ptr->msg = readItem(a.expression);
         ptr->test = readItem(a.test);
         return ptr;
     }
 
     ResultPtr read(pypa::AstAugAssign& a) {
-        AST_AugAssign* ptr = new AST_AugAssign();
-        location(ptr, a);
+        AST_AugAssign* ptr = new AST_AugAssign(sourcePos(a));
         ptr->op_type = readItem(a.op);
         ptr->target = readItem(a.target);
         ptr->value = readItem(a.value);
@@ -584,14 +526,12 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstBreak& b) {
-        AST_Break* ptr = new AST_Break();
-        location(ptr, b);
+        AST_Break* ptr = new AST_Break(sourcePos(b));
         return ptr;
     }
 
     ResultPtr read(pypa::AstClassDef& c) {
-        AST_ClassDef* ptr = new AST_ClassDef();
-        location(ptr, c);
+        AST_ClassDef* ptr = new AST_ClassDef(sourcePos(c));
         if (c.bases)
             readVector(ptr->bases, *c.bases);
         readVector(ptr->decorator_list, c.decorators);
@@ -601,28 +541,24 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstContinue& c) {
-        AST_Continue* ptr = new AST_Continue();
-        location(ptr, c);
+        AST_Continue* ptr = new AST_Continue(sourcePos(c));
         return ptr;
     }
 
     ResultPtr read(pypa::AstDelete& d) {
-        AST_Delete* ptr = new AST_Delete();
-        location(ptr, d);
+        AST_Delete* ptr = new AST_Delete(sourcePos(d));
         readVector(ptr->targets, *d.targets);
         return ptr;
     }
 
     ResultPtr read(pypa::AstExpressionStatement& e) {
-        AST_Expr* ptr = new AST_Expr();
-        location(ptr, e);
+        AST_Expr* ptr = new AST_Expr(sourcePos(e));
         ptr->value = readItem(e.expr);
         return ptr;
     }
 
     ResultPtr read(pypa::AstFor& f) {
-        AST_For* ptr = new AST_For();
-        location(ptr, f);
+        AST_For* ptr = new AST_For(sourcePos(f));
         ptr->target = readItem(f.target);
         if (f.iter)
             ptr->iter = readItem(f.iter);
@@ -634,8 +570,7 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstFunctionDef& f) {
-        AST_FunctionDef* ptr = new AST_FunctionDef();
-        location(ptr, f);
+        AST_FunctionDef* ptr = new AST_FunctionDef(sourcePos(f));
         readVector(ptr->decorator_list, f.decorators);
         ptr->name = readName(f.name);
         ptr->args = readItem(f.args);
@@ -644,8 +579,7 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstGlobal& g) {
-        AST_Global* ptr = new AST_Global();
-        location(ptr, g);
+        AST_Global* ptr = new AST_Global(sourcePos(g));
         ptr->names.resize(g.names.size());
         for (size_t i = 0; i < g.names.size(); ++i) {
             ptr->names[i] = readName(*g.names[i]);
@@ -654,8 +588,7 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstIf& i) {
-        AST_If* ptr = new AST_If();
-        location(ptr, i);
+        AST_If* ptr = new AST_If(sourcePos(i));
         readVector(ptr->body, i.body);
         ptr->test = readItem(i.test);
         assert(ptr->test != 0);
@@ -664,8 +597,7 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstImport& i) {
-        AST_Import* ptr = new AST_Import();
-        location(ptr, i);
+        AST_Import* ptr = new AST_Import(sourcePos(i));
         if (i.names->type == pypa::AstType::Tuple) {
             for (auto& name : static_cast<pypa::AstTuple&>(*i.names).elements) {
                 assert(name->type == pypa::AstType::Alias);
@@ -679,8 +611,7 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstImportFrom& i) {
-        AST_ImportFrom* ptr = new AST_ImportFrom();
-        location(ptr, i);
+        AST_ImportFrom* ptr = new AST_ImportFrom(sourcePos(i));
         ptr->module = readName(i.module);
         if (i.names->type == pypa::AstType::Tuple) {
             for (auto& name : static_cast<pypa::AstTuple&>(*i.names).elements) {
@@ -696,14 +627,12 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstPass& p) {
-        AST_Pass* ptr = new AST_Pass();
-        location(ptr, p);
+        AST_Pass* ptr = new AST_Pass(sourcePos(p));
         return ptr;
     }
 
     ResultPtr read(pypa::AstPrint& p) {
-        AST_Print* ptr = new AST_Print();
-        location(ptr, p);
+        AST_Print* ptr = new AST_Print(sourcePos(p));
         ptr->dest = readItem(p.destination);
         ptr->nl = p.newline;
         readVector(ptr->values, p.values);
@@ -711,8 +640,7 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstRaise& r) {
-        AST_Raise* ptr = new AST_Raise();
-        location(ptr, r);
+        AST_Raise* ptr = new AST_Raise(sourcePos(r));
         ptr->arg0 = readItem(r.arg0);
         ptr->arg1 = readItem(r.arg1);
         ptr->arg2 = readItem(r.arg2);
@@ -722,15 +650,13 @@ struct stmt_dispatcher {
     ResultPtr read(pypa::AstSuite& s) { return nullptr; }
 
     ResultPtr read(pypa::AstReturn& r) {
-        AST_Return* ptr = new AST_Return();
-        location(ptr, r);
+        AST_Return* ptr = new AST_Return(sourcePos(r));
         ptr->value = readItem(r.value);
         return ptr;
     }
 
     ResultPtr read(pypa::AstTryExcept& t) {
-        AST_TryExcept* ptr = new AST_TryExcept();
-        location(ptr, t);
+        AST_TryExcept* ptr = new AST_TryExcept(sourcePos(t));
         readVector(ptr->body, t.body);
         readVector(ptr->orelse, t.orelse);
         readVector(ptr->handlers, t.handlers);
@@ -738,16 +664,14 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstTryFinally& t) {
-        AST_TryFinally* ptr = new AST_TryFinally();
-        location(ptr, t);
+        AST_TryFinally* ptr = new AST_TryFinally(sourcePos(t));
         readVector(ptr->body, t.body);
         readVector(ptr->finalbody, t.final_body);
         return ptr;
     }
 
     ResultPtr read(pypa::AstWith& w) {
-        AST_With* ptr = new AST_With();
-        location(ptr, w);
+        AST_With* ptr = new AST_With(sourcePos(w));
         ptr->optional_vars = readItem(w.optional);
         ptr->context_expr = readItem(w.context);
         readVector(ptr->body, w.body);
@@ -755,8 +679,7 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstWhile& w) {
-        AST_While* ptr = new AST_While();
-        location(ptr, w);
+        AST_While* ptr = new AST_While(sourcePos(w));
         ptr->test = readItem(w.test);
         readVector(ptr->body, w.body);
         readVector(ptr->orelse, w.orelse);
@@ -764,15 +687,13 @@ struct stmt_dispatcher {
     }
 
     ResultPtr read(pypa::AstYield& w) {
-        AST_Expr* ptr = new AST_Expr();
-        location(ptr, w);
+        AST_Expr* ptr = new AST_Expr(sourcePos(w));
         ptr->value = readItem(w.yield);
         return ptr;
     }
 
     ResultPtr read(pypa::AstDocString& d) {
-        AST_Expr* ptr = new AST_Expr();
-        location(ptr, d);
+        AST_Expr* ptr = new AST_Expr(sourcePos(d));
         AST_Str* str = new AST_Str();
         ptr->value = str;
         str->str_type = AST_Str::STR;
@@ -780,6 +701,52 @@ struct stmt_dispatcher {
         return ptr;
     }
 };
+
+struct slice_dispatcher {
+    typedef AST_slice* ResultPtr;
+    template <typename T> ResultPtr operator()(std::shared_ptr<T> t) {
+        if (t)
+            return (*this)(*t);
+        return nullptr;
+    }
+
+    template <typename T> ResultPtr operator()(T& t) {
+        pypa::Ast& a = t;
+        return read(t);
+    }
+
+    template <typename T> ResultPtr read(T& item) {
+        pypa::Ast& a = item;
+        fprintf(stderr, "Unhandled ast slice type caught: %d @%s\n", a.type, __PRETTY_FUNCTION__);
+        return nullptr;
+    }
+
+    ResultPtr read(pypa::AstEllipsis& e) {
+        AST_Ellipsis* ptr = new AST_Ellipsis();
+        return ptr;
+    }
+
+    ResultPtr read(pypa::AstSlice& s) {
+        AST_Slice* ptr = new AST_Slice();
+        ptr->lower = readItem(s.lower);
+        ptr->upper = readItem(s.upper);
+        ptr->step = readItem(s.step);
+        return ptr;
+    }
+
+    ResultPtr read(pypa::AstExtSlice& e) {
+        AST_ExtSlice* ptr = new AST_ExtSlice();
+        readVector(ptr->dims, e.dims);
+        return ptr;
+    }
+
+    ResultPtr read(pypa::AstIndex& i) {
+        AST_Index* ptr = new AST_Index(sourcePos(i));
+        ptr->value = readItem(i.value);
+        return ptr;
+    }
+};
+
 
 AST_expr* readItem(pypa::AstExpression& e) {
     return pypa::visit<AST_expr*>(expr_dispatcher(), e);

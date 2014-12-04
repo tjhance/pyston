@@ -95,19 +95,20 @@ private:
     Value visit_dict(AST_Dict* node);
     Value visit_expr(AST_expr* node);
     Value visit_expr(AST_Expr* node);
-    Value visit_index(AST_Index* node);
     Value visit_lambda(AST_Lambda* node);
     Value visit_list(AST_List* node);
     Value visit_name(AST_Name* node);
     Value visit_num(AST_Num* node);
     Value visit_repr(AST_Repr* node);
     Value visit_set(AST_Set* node);
-    Value visit_slice(AST_Slice* node);
     Value visit_str(AST_Str* node);
     Value visit_subscript(AST_Subscript* node);
     Value visit_tuple(AST_Tuple* node);
     Value visit_yield(AST_Yield* node);
 
+    Value visit_slice(AST_slice* node);
+    Value visit_slice(AST_Slice* node);
+    Value visit_index(AST_Index* node);
 
     // pseudo
     Value visit_augBinOp(AST_AugBinOp* node);
@@ -124,7 +125,7 @@ private:
 
     SymMap sym_table;
     CFGBlock* next_block, *current_block;
-    AST* current_inst;
+    AST_stmt* current_inst;
     Box* last_exception;
     BoxedClosure* passed_closure, *created_closure;
     BoxedGenerator* generator;
@@ -178,7 +179,7 @@ LineInfo* ASTInterpreter::getCurrentLineInfo() {
     if (!current_inst)
         return NULL;
 
-    LineInfo* line_info = new LineInfo(current_inst->lineno, current_inst->col_offset, source_info->parent_module->fn,
+    LineInfo* line_info = new LineInfo(current_inst->pos.lineno, current_inst->pos.col_offset, source_info->parent_module->fn,
                                        source_info->getName());
     return line_info;
 }
@@ -349,7 +350,7 @@ void ASTInterpreter::doStore(AST_expr* node, Value value) {
         AST_Subscript* subscript = (AST_Subscript*)node;
 
         Value target = visit_expr(subscript->value);
-        Value slice = visit_expr(subscript->slice);
+        Value slice = visit_slice(subscript->slice);
 
         setitem(target.o, slice.o, value.o);
     } else {
@@ -713,7 +714,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
             case AST_TYPE::Subscript: {
                 AST_Subscript* sub = (AST_Subscript*)target_;
                 Value value = visit_expr(sub->value);
-                Value slice = visit_expr(sub->slice);
+                Value slice = visit_slice(sub->slice);
                 delitem(value.o, slice.o);
                 break;
             }
@@ -792,6 +793,17 @@ Value ASTInterpreter::visit_compare(AST_Compare* node) {
     return doBinOp(visit_expr(node->left).o, visit_expr(node->comparators[0]).o, node->ops[0], BinExpType::Compare);
 }
 
+Value __attribute__((flatten)) ASTInterpreter::visit_slice(AST_slice* node) {
+    switch (node->type) {
+        case AST_TYPE::Slice:
+            return visit_slice((AST_Slice*)node);
+        case AST_TYPE::Index:
+            return visit_index((AST_Index*)node);
+        default:
+            RELEASE_ASSERT(0, "");
+    }
+}
+
 Value __attribute__((flatten)) ASTInterpreter::visit_expr(AST_expr* node) {
     switch (node->type) {
         case AST_TYPE::Attribute:
@@ -804,8 +816,6 @@ Value __attribute__((flatten)) ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_compare((AST_Compare*)node);
         case AST_TYPE::Dict:
             return visit_dict((AST_Dict*)node);
-        case AST_TYPE::Index:
-            return visit_index((AST_Index*)node);
         case AST_TYPE::Lambda:
             return visit_lambda((AST_Lambda*)node);
         case AST_TYPE::List:
@@ -818,8 +828,6 @@ Value __attribute__((flatten)) ASTInterpreter::visit_expr(AST_expr* node) {
             return visit_repr((AST_Repr*)node);
         case AST_TYPE::Set:
             return visit_set((AST_Set*)node);
-        case AST_TYPE::Slice:
-            return visit_slice((AST_Slice*)node);
         case AST_TYPE::Str:
             return visit_str((AST_Str*)node);
         case AST_TYPE::Subscript:
@@ -923,7 +931,7 @@ Value ASTInterpreter::visit_repr(AST_Repr* node) {
 }
 
 Value ASTInterpreter::visit_lambda(AST_Lambda* node) {
-    AST_Return* expr = new AST_Return();
+    AST_Return* expr = new AST_Return(node->pos);
     expr->value = node->body;
 
     std::vector<AST_stmt*> body = { expr };
@@ -980,7 +988,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
 
 Value ASTInterpreter::visit_subscript(AST_Subscript* node) {
     Value value = visit_expr(node->value);
-    Value slice = visit_expr(node->slice);
+    Value slice = visit_slice(node->slice);
     return getitem(value.o, slice.o);
 }
 

@@ -27,6 +27,15 @@
 
 namespace pyston {
 
+struct SourcePos {
+    uint32_t lineno;
+    uint32_t col_offset;
+
+    SourcePos(int lineno, int col_offset)
+        : lineno(lineno),
+          col_offset(col_offset) {}
+};
+
 namespace AST_TYPE {
 // These are in a pretty random order (started off alphabetical but then I had to add more).
 // These can be changed freely as long as parse_ast.py is also updated
@@ -144,7 +153,6 @@ public:
     virtual ~AST() {}
 
     const AST_TYPE::AST_TYPE type;
-    uint32_t lineno, col_offset;
 
     virtual void accept(ASTVisitor* v) = 0;
 
@@ -155,14 +163,18 @@ class AST_expr : public AST {
 public:
     virtual void* accept_expr(ExprVisitor* v) = 0;
 
-    AST_expr(AST_TYPE::AST_TYPE type) : AST(type) {}
+    SourcePos pos;
+
+    AST_expr(AST_TYPE::AST_TYPE type, SourcePos pos) : AST(type), pos(pos) {}
 };
 
 class AST_stmt : public AST {
 public:
     virtual void accept_stmt(StmtVisitor* v) = 0;
 
-    AST_stmt(AST_TYPE::AST_TYPE type) : AST(type) {}
+    SourcePos pos;
+
+    AST_stmt(AST_TYPE::AST_TYPE type, SourcePos pos) : AST(type), pos(pos) {}
 };
 
 
@@ -194,6 +206,13 @@ public:
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::arguments;
 };
 
+class AST_slice : public AST {
+public:
+    virtual void* accept_expr(ExprVisitor* v) = 0;
+
+    AST_slice(AST_TYPE::AST_TYPE type) : AST(type) {}
+};
+
 class AST_Assert : public AST_stmt {
 public:
     AST_expr* msg, *test;
@@ -201,7 +220,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Assert() : AST_stmt(AST_TYPE::Assert) {}
+    AST_Assert(SourcePos pos) : AST_stmt(AST_TYPE::Assert, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Assert;
 };
@@ -214,7 +233,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Assign() : AST_stmt(AST_TYPE::Assign) {}
+    AST_Assign(SourcePos pos) : AST_stmt(AST_TYPE::Assign, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Assign;
 };
@@ -228,7 +247,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_AugAssign() : AST_stmt(AST_TYPE::AugAssign) {}
+    AST_AugAssign(SourcePos pos) : AST_stmt(AST_TYPE::AugAssign, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugAssign;
 };
@@ -241,7 +260,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_AugBinOp() : AST_expr(AST_TYPE::AugBinOp) {}
+    AST_AugBinOp(SourcePos pos) : AST_expr(AST_TYPE::AugBinOp, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::AugBinOp;
 };
@@ -255,10 +274,10 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Attribute() : AST_expr(AST_TYPE::Attribute) {}
+    AST_Attribute(SourcePos pos) : AST_expr(AST_TYPE::Attribute, pos) {}
 
-    AST_Attribute(AST_expr* value, AST_TYPE::AST_TYPE ctx_type, const std::string& attr)
-        : AST_expr(AST_TYPE::Attribute), value(value), ctx_type(ctx_type), attr(attr) {}
+    AST_Attribute(AST_expr* value, AST_TYPE::AST_TYPE ctx_type, const std::string& attr, SourcePos pos)
+        : AST_expr(AST_TYPE::Attribute, pos), value(value), ctx_type(ctx_type), attr(attr) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Attribute;
 };
@@ -271,7 +290,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_BinOp() : AST_expr(AST_TYPE::BinOp) {}
+    AST_BinOp(SourcePos pos) : AST_expr(AST_TYPE::BinOp, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::BinOp;
 };
@@ -284,7 +303,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_BoolOp() : AST_expr(AST_TYPE::BoolOp) {}
+    AST_BoolOp(SourcePos pos) : AST_expr(AST_TYPE::BoolOp, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::BoolOp;
 };
@@ -294,7 +313,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Break() : AST_stmt(AST_TYPE::Break) {}
+    AST_Break(SourcePos pos) : AST_stmt(AST_TYPE::Break, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Break;
 };
@@ -308,7 +327,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Call() : AST_expr(AST_TYPE::Call) {}
+    AST_Call(SourcePos pos) : AST_expr(AST_TYPE::Call, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Call;
 };
@@ -322,7 +341,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Compare() : AST_expr(AST_TYPE::Compare) {}
+    AST_Compare(SourcePos pos) : AST_expr(AST_TYPE::Compare, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Compare;
 };
@@ -349,7 +368,7 @@ public:
     std::vector<AST_stmt*> body;
     std::string name;
 
-    AST_ClassDef() : AST_stmt(AST_TYPE::ClassDef) {}
+    AST_ClassDef(SourcePos pos) : AST_stmt(AST_TYPE::ClassDef, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClassDef;
 };
@@ -359,7 +378,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Continue() : AST_stmt(AST_TYPE::Continue) {}
+    AST_Continue(SourcePos pos) : AST_stmt(AST_TYPE::Continue, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Continue;
 };
@@ -371,7 +390,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Dict() : AST_expr(AST_TYPE::Dict) {}
+    AST_Dict(SourcePos pos) : AST_expr(AST_TYPE::Dict, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Dict;
 };
@@ -384,7 +403,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_DictComp() : AST_expr(AST_TYPE::DictComp) {}
+    AST_DictComp(SourcePos pos) : AST_expr(AST_TYPE::DictComp, pos) {}
 
     const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::DictComp;
 };
@@ -395,17 +414,17 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Delete() : AST_stmt(AST_TYPE::Delete) {}
+    AST_Delete(SourcePos pos) : AST_stmt(AST_TYPE::Delete, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Delete;
 };
 
-class AST_Ellipsis : public AST_expr {
+class AST_Ellipsis : public AST_slice {
 public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Ellipsis() : AST_expr(AST_TYPE::Ellipsis) {}
+    AST_Ellipsis() : AST_slice(AST_TYPE::Ellipsis) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Ellipsis;
 };
@@ -417,7 +436,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Expr() : AST_stmt(AST_TYPE::Expr) {}
+    AST_Expr(SourcePos pos) : AST_stmt(AST_TYPE::Expr, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Expr;
 };
@@ -428,22 +447,24 @@ public:
     AST_expr* type; // can be NULL for a bare "except:" clause
     AST_expr* name; // can be NULL if the exception doesn't get a name
 
+    SourcePos pos;
+
     virtual void accept(ASTVisitor* v);
 
-    AST_ExceptHandler() : AST(AST_TYPE::ExceptHandler) {}
+    AST_ExceptHandler(SourcePos pos) : AST(AST_TYPE::ExceptHandler), pos(pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExceptHandler;
 };
 
 
-class AST_ExtSlice : public AST_expr {
+class AST_ExtSlice : public AST_slice {
 public:
     std::vector<AST_expr*> dims;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_ExtSlice() : AST_expr(AST_TYPE::ExtSlice) {}
+    AST_ExtSlice() : AST_slice(AST_TYPE::ExtSlice) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ExtSlice;
 };
@@ -456,7 +477,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_For() : AST_stmt(AST_TYPE::For) {}
+    AST_For(SourcePos pos) : AST_stmt(AST_TYPE::For, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::For;
 };
@@ -471,7 +492,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_FunctionDef() : AST_stmt(AST_TYPE::FunctionDef) {}
+    AST_FunctionDef(SourcePos pos) : AST_stmt(AST_TYPE::FunctionDef, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::FunctionDef;
 };
@@ -484,7 +505,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_GeneratorExp() : AST_expr(AST_TYPE::GeneratorExp) {}
+    AST_GeneratorExp(SourcePos pos) : AST_expr(AST_TYPE::GeneratorExp, pos) {}
 
     const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::GeneratorExp;
 };
@@ -496,7 +517,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Global() : AST_stmt(AST_TYPE::Global) {}
+    AST_Global(SourcePos pos) : AST_stmt(AST_TYPE::Global, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Global;
 };
@@ -509,7 +530,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_If() : AST_stmt(AST_TYPE::If) {}
+    AST_If(SourcePos pos) : AST_stmt(AST_TYPE::If, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::If;
 };
@@ -521,7 +542,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_IfExp() : AST_expr(AST_TYPE::IfExp) {}
+    AST_IfExp(SourcePos pos) : AST_expr(AST_TYPE::IfExp, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::IfExp;
 };
@@ -533,7 +554,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Import() : AST_stmt(AST_TYPE::Import) {}
+    AST_Import(SourcePos pos) : AST_stmt(AST_TYPE::Import, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Import;
 };
@@ -547,19 +568,19 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_ImportFrom() : AST_stmt(AST_TYPE::ImportFrom) {}
+    AST_ImportFrom(SourcePos pos) : AST_stmt(AST_TYPE::ImportFrom, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ImportFrom;
 };
 
-class AST_Index : public AST_expr {
+class AST_Index : public AST_slice {
 public:
     AST_expr* value;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Index() : AST_expr(AST_TYPE::Index) {}
+    AST_Index() : AST_slice(AST_TYPE::Index) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Index;
 };
@@ -585,7 +606,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Lambda() : AST_expr(AST_TYPE::Lambda) {}
+    AST_Lambda(SourcePos pos) : AST_expr(AST_TYPE::Lambda, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Lambda;
 };
@@ -598,7 +619,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_List() : AST_expr(AST_TYPE::List) {}
+    AST_List(SourcePos pos) : AST_expr(AST_TYPE::List, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::List;
 };
@@ -611,7 +632,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_ListComp() : AST_expr(AST_TYPE::ListComp) {}
+    AST_ListComp(SourcePos pos) : AST_expr(AST_TYPE::ListComp, pos) {}
 
     const static AST_TYPE::AST_TYPE TYPE = AST_TYPE::ListComp;
 };
@@ -636,7 +657,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Name() : AST_expr(AST_TYPE::Name) {}
+    AST_Name(SourcePos pos) : AST_expr(AST_TYPE::Name, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Name;
 };
@@ -662,7 +683,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Num() : AST_expr(AST_TYPE::Num) {}
+    AST_Num(SourcePos pos) : AST_expr(AST_TYPE::Num, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Num;
 };
@@ -674,7 +695,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Repr() : AST_expr(AST_TYPE::Repr) {}
+    AST_Repr(SourcePos pos) : AST_expr(AST_TYPE::Repr, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Repr;
 };
@@ -684,7 +705,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Pass() : AST_stmt(AST_TYPE::Pass) {}
+    AST_Pass(SourcePos pos) : AST_stmt(AST_TYPE::Pass, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Pass;
 };
@@ -698,7 +719,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Print() : AST_stmt(AST_TYPE::Print) {}
+    AST_Print(SourcePos pos) : AST_stmt(AST_TYPE::Print, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Print;
 };
@@ -714,7 +735,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Raise() : AST_stmt(AST_TYPE::Raise), arg0(NULL), arg1(NULL), arg2(NULL) {}
+    AST_Raise(SourcePos pos) : AST_stmt(AST_TYPE::Raise, pos), arg0(NULL), arg1(NULL), arg2(NULL) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Raise;
 };
@@ -726,7 +747,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Return() : AST_stmt(AST_TYPE::Return) {}
+    AST_Return(SourcePos pos) : AST_stmt(AST_TYPE::Return, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Return;
 };
@@ -738,19 +759,19 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Set() : AST_expr(AST_TYPE::Set) {}
+    AST_Set(SourcePos pos) : AST_expr(AST_TYPE::Set, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Set;
 };
 
-class AST_Slice : public AST_expr {
+class AST_Slice : public AST_slice {
 public:
     AST_expr* lower, *upper, *step;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Slice() : AST_expr(AST_TYPE::Slice) {}
+    AST_Slice() : AST_slice(AST_TYPE::Slice) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Slice;
 };
@@ -767,22 +788,23 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Str() : AST_expr(AST_TYPE::Str) {}
-    AST_Str(const std::string& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(s) {}
-    AST_Str(const std::string&& s) : AST_expr(AST_TYPE::Str), str_type(STR), s(std::move(s)) {}
+    AST_Str(SourcePos pos) : AST_expr(AST_TYPE::Str, pos) {}
+    AST_Str(const std::string& s, SourcePos pos) : AST_expr(AST_TYPE::Str, pos), str_type(STR), s(s) {}
+    AST_Str(const std::string&& s, SourcePos pos) : AST_expr(AST_TYPE::Str, pos), str_type(STR), s(std::move(s)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Str;
 };
 
 class AST_Subscript : public AST_expr {
 public:
-    AST_expr* value, *slice;
+    AST_expr* value;
+    AST_slice* slice;
     AST_TYPE::AST_TYPE ctx_type;
 
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Subscript() : AST_expr(AST_TYPE::Subscript) {}
+    AST_Subscript(SourcePos pos) : AST_expr(AST_TYPE::Subscript, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Subscript;
 };
@@ -795,7 +817,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_TryExcept() : AST_stmt(AST_TYPE::TryExcept) {}
+    AST_TryExcept(SourcePos pos) : AST_stmt(AST_TYPE::TryExcept, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::TryExcept;
 };
@@ -807,7 +829,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_TryFinally() : AST_stmt(AST_TYPE::TryFinally) {}
+    AST_TryFinally(SourcePos pos) : AST_stmt(AST_TYPE::TryFinally, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::TryFinally;
 };
@@ -820,7 +842,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Tuple() : AST_expr(AST_TYPE::Tuple) {}
+    AST_Tuple(SourcePos pos) : AST_expr(AST_TYPE::Tuple, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Tuple;
 };
@@ -833,7 +855,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_UnaryOp() : AST_expr(AST_TYPE::UnaryOp) {}
+    AST_UnaryOp(SourcePos pos) : AST_expr(AST_TYPE::UnaryOp, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::UnaryOp;
 };
@@ -846,7 +868,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_While() : AST_stmt(AST_TYPE::While) {}
+    AST_While(SourcePos pos) : AST_stmt(AST_TYPE::While, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::While;
 };
@@ -859,7 +881,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_With() : AST_stmt(AST_TYPE::With) {}
+    AST_With(SourcePos pos) : AST_stmt(AST_TYPE::With, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::With;
 };
@@ -871,7 +893,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_Yield() : AST_expr(AST_TYPE::Yield) {}
+    AST_Yield(SourcePos pos) : AST_expr(AST_TYPE::Yield, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Yield;
 };
@@ -890,7 +912,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Branch() : AST_stmt(AST_TYPE::Branch) {}
+    AST_Branch() : AST_stmt(AST_TYPE::Branch, SourcePos(-1, -1)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Branch;
 };
@@ -902,10 +924,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Jump() : AST_stmt(AST_TYPE::Jump) {
-        lineno = -1;
-        col_offset = -1;
-    }
+    AST_Jump() : AST_stmt(AST_TYPE::Jump, SourcePos(-1, -1)) { }
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Jump;
 };
@@ -918,7 +937,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_ClsAttribute() : AST_expr(AST_TYPE::ClsAttribute) {}
+    AST_ClsAttribute(SourcePos pos) : AST_expr(AST_TYPE::ClsAttribute, pos) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::ClsAttribute;
 };
@@ -932,7 +951,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Invoke(AST_stmt* stmt) : AST_stmt(AST_TYPE::Invoke), stmt(stmt) {}
+    AST_Invoke(AST_stmt* stmt) : AST_stmt(AST_TYPE::Invoke, stmt->pos), stmt(stmt) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Invoke;
 };
@@ -959,7 +978,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void* accept_expr(ExprVisitor* v);
 
-    AST_LangPrimitive(Opcodes opcode) : AST_expr(AST_TYPE::LangPrimitive), opcode(opcode) {}
+    AST_LangPrimitive(Opcodes opcode, SourcePos pos) : AST_expr(AST_TYPE::LangPrimitive, pos), opcode(opcode) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::LangPrimitive;
 };
@@ -969,7 +988,7 @@ public:
     virtual void accept(ASTVisitor* v);
     virtual void accept_stmt(StmtVisitor* v);
 
-    AST_Unreachable() : AST_stmt(AST_TYPE::Unreachable) {}
+    AST_Unreachable(SourcePos pos) : AST_stmt(AST_TYPE::Unreachable, SourcePos(-1, -1)) {}
 
     static const AST_TYPE::AST_TYPE TYPE = AST_TYPE::Unreachable;
 };

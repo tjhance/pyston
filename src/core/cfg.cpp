@@ -53,11 +53,9 @@ void CFGBlock::unconnectFrom(CFGBlock* successor) {
                                   successor->predecessors.end());
 }
 
-static AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, int lineno = 0, int col_offset = 0) {
-    AST_Name* name = new AST_Name();
+static AST_Name* makeName(const std::string& id, AST_TYPE::AST_TYPE ctx_type, SourcePos pos) {
+    AST_Name* name = new AST_Name(pos);
     name->id = id;
-    name->col_offset = col_offset;
-    name->lineno = lineno;
     name->ctx_type = ctx_type;
     return name;
 }
@@ -105,10 +103,8 @@ private:
             curblock->connectTo(rtn_dest);
             push_back(j);
         } else {
-            AST_Return* node = new AST_Return();
+            AST_Return* node = new AST_Return(val->pos);
             node->value = value;
-            node->col_offset = value->col_offset;
-            node->lineno = value->lineno;
             push_back(node);
         }
         curblock = NULL;
@@ -141,6 +137,9 @@ private:
         return makeCall(makeLoadAttribute(name, "append", true), elt);
     }
 
+    // e.g.,
+    //     AST_Dict -> AST_DictComp
+    //     AST_List -> AST_ListComp
     template <typename ResultASTType, typename CompType> AST_expr* remapComprehension(CompType* node) {
         std::string rtn_name = nodeName(node);
         pushAssign(rtn_name, new ResultASTType());
@@ -157,7 +156,7 @@ private:
             bool is_innermost = (i == n - 1);
 
             AST_expr* remapped_iter = remapExpr(c->iter);
-            AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER);
+            AST_LangPrimitive* iter_call = new AST_LangPrimitive(AST_LangPrimitive::GET_ITER, node->pos);
             iter_call->args.push_back(remapped_iter);
             std::string iter_name = nodeName(node, "lc_iter", i);
             pushAssign(iter_name, iter_call);
@@ -172,7 +171,7 @@ private:
             test_block->info = "comprehension_test";
             // printf("Test block for comp %d is %d\n", i, test_block->idx);
 
-            j = new AST_Jump();
+            j = new AST_Jump(node->pos);
             j->target = test_block;
             curblock->connectTo(test_block);
             push_back(j);
@@ -187,7 +186,7 @@ private:
             exit_blocks.push_back(exit_block);
             // printf("Body block for comp %d is %d\n", i, body_block->idx);
 
-            AST_Branch* br = new AST_Branch();
+            AST_Branch* br = new AST_Branch(node->pos);
             br->col_offset = node->col_offset;
             br->lineno = node->lineno;
             br->test = test_call;
@@ -204,7 +203,7 @@ private:
 
             for (AST_expr* if_condition : c->ifs) {
                 AST_expr* remapped = remapExpr(if_condition);
-                AST_Branch* br = new AST_Branch();
+                AST_Branch* br = new AST_Branch(node->pos);
                 br->test = remapped;
                 push_back(br);
 
@@ -222,7 +221,7 @@ private:
                 curblock->connectTo(body_continue);
 
                 curblock = body_tramp;
-                j = new AST_Jump();
+                j = new AST_Jump(node->pos);
                 j->target = test_block;
                 push_back(j);
                 curblock->connectTo(test_block, true);
@@ -235,7 +234,7 @@ private:
             assert((finished_block != NULL) == (i != 0));
             if (finished_block) {
                 curblock = exit_block;
-                j = new AST_Jump();
+                j = new AST_Jump(node->pos);
                 j->target = finished_block;
                 curblock->connectTo(finished_block, true);
                 push_back(j);
@@ -246,7 +245,7 @@ private:
             if (is_innermost) {
                 push_back(makeExpr(applyComprehensionCall(node, makeName(rtn_name, AST_TYPE::Load))));
 
-                j = new AST_Jump();
+                j = new AST_Jump(node->pos);
                 j->target = test_block;
                 curblock->connectTo(test_block, true);
                 push_back(j);
@@ -269,8 +268,8 @@ private:
         return makeName(rtn_name, AST_TYPE::Load);
     }
 
-    AST_expr* makeNum(int n) {
-        AST_Num* node = new AST_Num();
+    AST_expr* makeNum(int n, SourcePos pos) {
+        AST_Num* node = new AST_Num(pos);
         node->num_type = AST_Num::INT;
         node->n_int = n;
         return node;
@@ -292,19 +291,17 @@ private:
     AST_expr* makeLoadAttribute(AST_expr* base, const std::string& name, bool clsonly) {
         AST_expr* rtn;
         if (clsonly) {
-            AST_ClsAttribute* attr = new AST_ClsAttribute();
+            AST_ClsAttribute* attr = new AST_ClsAttribute(base->pos);
             attr->value = base;
             attr->attr = name;
             rtn = attr;
         } else {
-            AST_Attribute* attr = new AST_Attribute();
+            AST_Attribute* attr = new AST_Attribute(base->pos);
             attr->ctx_type = AST_TYPE::Load;
             attr->value = base;
             attr->attr = name;
             rtn = attr;
         }
-        rtn->col_offset = base->col_offset;
-        rtn->lineno = base->lineno;
         return rtn;
     }
 
@@ -1804,10 +1801,10 @@ public:
                 if (exc_handler->type) {
                     AST_expr* handled_type = remapExpr(exc_handler->type);
 
-                    AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::ISINSTANCE);
+                    AST_LangPrimitive* is_caught_here = new AST_LangPrimitive(AST_LangPrimitive::ISINSTANCE, exc_handler->pos);
                     is_caught_here->args.push_back(exc_obj);
                     is_caught_here->args.push_back(handled_type);
-                    is_caught_here->args.push_back(makeNum(1)); // flag: false_on_noncls
+                    is_caught_here->args.push_back(makeNum(1, is_caught_here->pos)); // flag: false_on_noncls
 
                     AST_Branch* br = new AST_Branch();
                     br->test = remapExpr(is_caught_here);
@@ -1849,7 +1846,7 @@ public:
             }
 
             if (!caught_all) {
-                AST_Raise* raise = new AST_Raise();
+                AST_Raise* raise = new AST_Raise(node->pos);
                 push_back(raise);
                 curblock->push_back(new AST_Unreachable());
                 curblock = NULL;
@@ -2019,7 +2016,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         // A classdef always starts with "__module__ = __name__"
         Box* module_name = source->parent_module->getattr("__name__", NULL);
         assert(module_name->cls == str_cls);
-        AST_Assign* module_assign = new AST_Assign();
+        AST_Assign* module_assign = new AST_Assign(SourcePos(0, 0));
         module_assign->targets.push_back(makeName("__module__", AST_TYPE::Store));
         module_assign->value = new AST_Str(static_cast<BoxedString*>(module_name)->s);
         module_assign->lineno = 0;
@@ -2029,7 +2026,7 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
         if (body.size() && body[0]->type == AST_TYPE::Expr) {
             AST_Expr* first_expr = ast_cast<AST_Expr>(body[0]);
             if (first_expr->value->type == AST_TYPE::Str) {
-                AST_Assign* doc_assign = new AST_Assign();
+                AST_Assign* doc_assign = new AST_Assign(first_expr->pos);
                 doc_assign->targets.push_back(makeName("__doc__", AST_TYPE::Store));
                 doc_assign->value = first_expr->value;
                 doc_assign->lineno = 0;
@@ -2046,16 +2043,16 @@ CFG* computeCFG(SourceInfo* source, std::vector<AST_stmt*> body) {
     // The functions we create for classdefs are supposed to return a dictionary of their locals.
     // This is the place that we add all of that:
     if (source->ast->type == AST_TYPE::ClassDef) {
-        AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS);
+        AST_LangPrimitive* locals = new AST_LangPrimitive(AST_LangPrimitive::LOCALS, SourcePos(-1, -1));
 
-        AST_Return* rtn = new AST_Return();
+        AST_Return* rtn = new AST_Return(SourcePos(-1, -1));
         rtn->value = locals;
         visitor.push_back(rtn);
     } else {
         // Put a fake "return" statement at the end of every function just to make sure they all have one;
         // we already have to support multiple return statements in a function, but this way we can avoid
         // having to support not having a return statement:
-        AST_Return* return_stmt = new AST_Return();
+        AST_Return* return_stmt = new AST_Return(SourcePos(-1, -1));
         return_stmt->lineno = return_stmt->col_offset = 0;
         return_stmt->value = NULL;
         visitor.push_back(return_stmt);

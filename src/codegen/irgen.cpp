@@ -1024,9 +1024,18 @@ static void computeBlockSetClosure(BlockSet& full_blocks, BlockSet& partial_bloc
 }
 // returns a pointer to the function-info mdnode
 static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::string origname) {
-    int lineno = 0;
-    if (source->ast)
-        lineno = source->ast->lineno;
+    SourcePos pos(0, 0);
+    if (source->ast) {
+        if (source->ast->type == AST_TYPE::Module) {
+            pos = SourcePos(1, 1);
+        } else if (source->ast->type == AST_TYPE::ClassDef || source->ast->type == AST_TYPE::FunctionDef) {
+            pos = static_cast<AST_stmt*>(source->ast)->pos;
+        } else if (source->ast->type == AST_TYPE::Lambda) {
+            pos = static_cast<AST_expr*>(source->ast)->pos;
+        } else {
+            assert(false);
+        }
+    }
 
     llvm::DIBuilder builder(*g.cur_module);
 
@@ -1041,8 +1050,8 @@ static llvm::MDNode* setupDebugInfo(SourceInfo* source, llvm::Function* f, std::
     llvm::DITypeArray param_types = builder.getOrCreateTypeArray(llvm::None);
 #endif
     llvm::DICompositeType func_type = builder.createSubroutineType(file, param_types);
-    llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, lineno, func_type,
-                                                          false, true, lineno + 1, 0, true, f);
+    llvm::DISubprogram func_info = builder.createFunction(file, f->getName(), f->getName(), file, pos.lineno, func_type,
+                                                          false, true, pos.lineno + 1, 0, true, f);
 
     // The 'variables' field gets initialized with a tag-prefixed array, but
     // a later verifier asserts that there is no tag.  Replace it with an empty array:
