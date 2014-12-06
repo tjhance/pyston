@@ -2,13 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "src/v8.h"
+//#include "src/base/bits.h"
+//#include "src/macro-assembler.h"
+//#include "src/serialize.h"
 
-#if V8_TARGET_ARCH_X64
-
-#include "src/base/bits.h"
-#include "src/macro-assembler.h"
-#include "src/serialize.h"
+#include "asm_writing/x64/assembler-x64.h"
 
 namespace v8 {
 namespace internal {
@@ -65,7 +63,7 @@ void RelocInfo::PatchCodeWithCall(Address target, int guard_bytes) {
   patcher.masm()->call(kScratchRegister);
 
   // Check that the size of the code generated is as expected.
-  DCHECK_EQ(Assembler::kCallSequenceLength,
+  assert(Assembler::kCallSequenceLength ==
             patcher.masm()->SizeOfCodeGeneratedSince(&check_codesize));
 
   // Add the requested number of int3 instructions after the call.
@@ -126,7 +124,7 @@ Operand::Operand(Register base,
                  Register index,
                  ScaleFactor scale,
                  int32_t disp) : rex_(0) {
-  DCHECK(!index.is(rsp));
+  assert(!index.is(rsp));
   len_ = 1;
   set_sib(scale, index, base);
   if (disp == 0 && !base.is(rbp) && !base.is(r13)) {
@@ -146,7 +144,7 @@ Operand::Operand(Register base,
 Operand::Operand(Register index,
                  ScaleFactor scale,
                  int32_t disp) : rex_(0) {
-  DCHECK(!index.is(rsp));
+  assert(!index.is(rsp));
   len_ = 1;
   set_modrm(0, rsp);
   set_sib(scale, index, rbp);
@@ -155,10 +153,10 @@ Operand::Operand(Register index,
 
 
 Operand::Operand(const Operand& operand, int32_t offset) {
-  DCHECK(operand.len_ >= 1);
+  assert(operand.len_ >= 1);
   // Operand encodes REX ModR/M [SIB] [Disp].
   byte modrm = operand.buf_[0];
-  DCHECK(modrm < 0xC0);  // Disallow mode 3 (register target).
+  assert(modrm < 0xC0);  // Disallow mode 3 (register target).
   bool has_sib = ((modrm & 0x07) == 0x04);
   byte mode = modrm & 0xC0;
   int disp_offset = has_sib ? 2 : 1;
@@ -176,7 +174,7 @@ Operand::Operand(const Operand& operand, int32_t offset) {
   }
 
   // Write new operand with same registers, but with modified displacement.
-  DCHECK(offset >= 0 ? disp_value + offset > disp_value
+  assert(offset >= 0 ? disp_value + offset > disp_value
                      : disp_value + offset < disp_value);  // No overflow.
   disp_value += offset;
   rex_ = operand.rex_;
@@ -203,7 +201,7 @@ Operand::Operand(const Operand& operand, int32_t offset) {
 
 bool Operand::AddressUsesRegister(Register reg) const {
   int code = reg.code();
-  DCHECK((buf_[0] & 0xC0) != 0xC0);  // Always a memory operand.
+  assert((buf_[0] & 0xC0) != 0xC0);  // Always a memory operand.
   // Start with only low three bits of base register. Initial decoding doesn't
   // distinguish on the REX.B bit.
   int base_code = buf_[0] & 0x07;
@@ -260,12 +258,12 @@ Assembler::Assembler(Isolate* isolate, void* buffer, int buffer_size)
 void Assembler::GetCode(CodeDesc* desc) {
   // Finalize code (at this point overflow() may be true, but the gap ensures
   // that we are still not overlapping instructions and relocation info).
-  DCHECK(pc_ <= reloc_info_writer.pos());  // No overlap.
+  assert(pc_ <= reloc_info_writer.pos());  // No overlap.
   // Set up code descriptor.
   desc->buffer = buffer_;
   desc->buffer_size = buffer_size_;
   desc->instr_size = pc_offset();
-  DCHECK(desc->instr_size > 0);  // Zero-size code objects upset the system.
+  assert(desc->instr_size > 0);  // Zero-size code objects upset the system.
   desc->reloc_size =
       static_cast<int>((buffer_ + buffer_size_) - reloc_info_writer.pos());
   desc->origin = this;
@@ -273,7 +271,7 @@ void Assembler::GetCode(CodeDesc* desc) {
 
 
 void Assembler::Align(int m) {
-  DCHECK(base::bits::IsPowerOfTwo32(m));
+  assert(base::bits::IsPowerOfTwo32(m));
   int delta = (m - (pc_offset() & (m - 1))) & (m - 1);
   Nop(delta);
 }
@@ -294,8 +292,8 @@ bool Assembler::IsNop(Address addr) {
 
 
 void Assembler::bind_to(Label* L, int pos) {
-  DCHECK(!L->is_bound());  // Label may only be bound once.
-  DCHECK(0 <= pos && pos <= pc_offset());  // Position must be valid.
+  assert(!L->is_bound());  // Label may only be bound once.
+  assert(0 <= pos && pos <= pc_offset());  // Position must be valid.
   if (L->is_linked()) {
     int current = L->pos();
     int next = long_at(current);
@@ -314,7 +312,7 @@ void Assembler::bind_to(Label* L, int pos) {
     int fixup_pos = L->near_link_pos();
     int offset_to_next =
         static_cast<int>(*reinterpret_cast<int8_t*>(addr_at(fixup_pos)));
-    DCHECK(offset_to_next <= 0);
+    assert(offset_to_next <= 0);
     int disp = pos - (fixup_pos + sizeof(int8_t));
     CHECK(is_int8(disp));
     set_byte_at(fixup_pos, disp);
@@ -334,7 +332,7 @@ void Assembler::bind(Label* L) {
 
 
 void Assembler::GrowBuffer() {
-  DCHECK(buffer_overflow());
+  assert(buffer_overflow());
   if (!own_buffer_) FATAL("external code buffer is too small");
 
   // Compute new buffer size.
@@ -387,17 +385,17 @@ void Assembler::GrowBuffer() {
     }
   }
 
-  DCHECK(!buffer_overflow());
+  assert(!buffer_overflow());
 }
 
 
 void Assembler::emit_operand(int code, const Operand& adr) {
-  DCHECK(is_uint3(code));
+  assert(is_uint3(code));
   const unsigned length = adr.len_;
-  DCHECK(length > 0);
+  assert(length > 0);
 
   // Emit updated ModR/M byte containing the given register.
-  DCHECK((adr.buf_[0] & 0x38) == 0);
+  assert((adr.buf_[0] & 0x38) == 0);
   pc_[0] = adr.buf_[0] | code << 3;
 
   // Emit the rest of the encoded operand.
@@ -424,7 +422,7 @@ void Assembler::arithmetic_op(byte opcode,
                               Register rm_reg,
                               int size) {
   EnsureSpace ensure_space(this);
-  DCHECK((opcode & 0xC6) == 2);
+  assert((opcode & 0xC6) == 2);
   if (rm_reg.low_bits() == 4)  {  // Forces SIB byte.
     // Swap reg and rm_reg and change opcode operand order.
     emit_rex(rm_reg, reg, size);
@@ -440,7 +438,7 @@ void Assembler::arithmetic_op(byte opcode,
 
 void Assembler::arithmetic_op_16(byte opcode, Register reg, Register rm_reg) {
   EnsureSpace ensure_space(this);
-  DCHECK((opcode & 0xC6) == 2);
+  assert((opcode & 0xC6) == 2);
   if (rm_reg.low_bits() == 4) {  // Forces SIB byte.
     // Swap reg and rm_reg and change opcode operand order.
     emit(0x66);
@@ -480,7 +478,7 @@ void Assembler::arithmetic_op_8(byte opcode, Register reg, const Operand& op) {
 
 void Assembler::arithmetic_op_8(byte opcode, Register reg, Register rm_reg) {
   EnsureSpace ensure_space(this);
-  DCHECK((opcode & 0xC6) == 2);
+  assert((opcode & 0xC6) == 2);
   if (rm_reg.low_bits() == 4)  {  // Forces SIB byte.
     // Swap reg and rm_reg and change opcode operand order.
     if (!rm_reg.is_byte_register() || !reg.is_byte_register()) {
@@ -582,7 +580,7 @@ void Assembler::immediate_arithmetic_op_8(byte subcode,
                                           Immediate src) {
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst);
-  DCHECK(is_int8(src.value_) || is_uint8(src.value_));
+  assert(is_int8(src.value_) || is_uint8(src.value_));
   emit(0x80);
   emit_operand(subcode, dst);
   emit(src.value_);
@@ -597,7 +595,7 @@ void Assembler::immediate_arithmetic_op_8(byte subcode,
     // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
     emit_rex_32(dst);
   }
-  DCHECK(is_int8(src.value_) || is_uint8(src.value_));
+  assert(is_int8(src.value_) || is_uint8(src.value_));
   emit(0x80);
   emit_modrm(subcode, dst);
   emit(src.value_);
@@ -609,7 +607,7 @@ void Assembler::shift(Register dst,
                       int subcode,
                       int size) {
   EnsureSpace ensure_space(this);
-  DCHECK(size == kInt64Size ? is_uint6(shift_amount.value_)
+  assert(size == kInt64Size ? is_uint6(shift_amount.value_)
                             : is_uint5(shift_amount.value_));
   if (shift_amount.value_ == 1) {
     emit_rex(dst, size);
@@ -627,7 +625,7 @@ void Assembler::shift(Register dst,
 void Assembler::shift(Operand dst, Immediate shift_amount, int subcode,
                       int size) {
   EnsureSpace ensure_space(this);
-  DCHECK(size == kInt64Size ? is_uint6(shift_amount.value_)
+  assert(size == kInt64Size ? is_uint6(shift_amount.value_)
                             : is_uint5(shift_amount.value_));
   if (shift_amount.value_ == 1) {
     emit_rex(dst, size);
@@ -692,13 +690,13 @@ void Assembler::call(Label* L) {
   emit(0xE8);
   if (L->is_bound()) {
     int offset = L->pos() - pc_offset() - sizeof(int32_t);
-    DCHECK(offset <= 0);
+    assert(offset <= 0);
     emitl(offset);
   } else if (L->is_linked()) {
     emitl(L->pos());
     L->link_to(pc_offset() - sizeof(int32_t));
   } else {
-    DCHECK(L->is_unused());
+    assert(L->is_unused());
     int32_t current = pc_offset();
     emitl(current);
     L->link_to(current);
@@ -707,7 +705,7 @@ void Assembler::call(Label* L) {
 
 
 void Assembler::call(Address entry, RelocInfo::Mode rmode) {
-  DCHECK(RelocInfo::IsRuntimeEntry(rmode));
+  assert(RelocInfo::IsRuntimeEntry(rmode));
   positions_recorder()->WriteRecordedPositions();
   EnsureSpace ensure_space(this);
   // 1110 1000 #32-bit disp.
@@ -758,7 +756,7 @@ void Assembler::call(Address target) {
   emit(0xE8);
   Address source = pc_ + 4;
   intptr_t displacement = target - source;
-  DCHECK(is_int32(displacement));
+  assert(is_int32(displacement));
   emitl(static_cast<int32_t>(displacement));
 }
 
@@ -789,7 +787,7 @@ void Assembler::cmovq(Condition cc, Register dst, Register src) {
   }
   // No need to check CpuInfo for CMOV support, it's a required part of the
   // 64-bit architecture.
-  DCHECK(cc >= 0);  // Use mov for unconditional moves.
+  assert(cc >= 0);  // Use mov for unconditional moves.
   EnsureSpace ensure_space(this);
   // Opcode: REX.W 0f 40 + cc /r.
   emit_rex_64(dst, src);
@@ -805,7 +803,7 @@ void Assembler::cmovq(Condition cc, Register dst, const Operand& src) {
   } else if (cc == never) {
     return;
   }
-  DCHECK(cc >= 0);
+  assert(cc >= 0);
   EnsureSpace ensure_space(this);
   // Opcode: REX.W 0f 40 + cc /r.
   emit_rex_64(dst, src);
@@ -821,7 +819,7 @@ void Assembler::cmovl(Condition cc, Register dst, Register src) {
   } else if (cc == never) {
     return;
   }
-  DCHECK(cc >= 0);
+  assert(cc >= 0);
   EnsureSpace ensure_space(this);
   // Opcode: 0f 40 + cc /r.
   emit_optional_rex_32(dst, src);
@@ -837,7 +835,7 @@ void Assembler::cmovl(Condition cc, Register dst, const Operand& src) {
   } else if (cc == never) {
     return;
   }
-  DCHECK(cc >= 0);
+  assert(cc >= 0);
   EnsureSpace ensure_space(this);
   // Opcode: 0f 40 + cc /r.
   emit_optional_rex_32(dst, src);
@@ -848,7 +846,7 @@ void Assembler::cmovl(Condition cc, Register dst, const Operand& src) {
 
 
 void Assembler::cmpb_al(Immediate imm8) {
-  DCHECK(is_int8(imm8.value_) || is_uint8(imm8.value_));
+  assert(is_int8(imm8.value_) || is_uint8(imm8.value_));
   EnsureSpace ensure_space(this);
   emit(0x3c);
   emit(imm8.value_);
@@ -1029,12 +1027,12 @@ void Assembler::j(Condition cc, Label* L, Label::Distance distance) {
     return;
   }
   EnsureSpace ensure_space(this);
-  DCHECK(is_uint4(cc));
+  assert(is_uint4(cc));
   if (L->is_bound()) {
     const int short_size = 2;
     const int long_size  = 6;
     int offs = L->pos() - pc_offset();
-    DCHECK(offs <= 0);
+    assert(offs <= 0);
     // Determine whether we can use 1-byte offsets for backwards branches,
     // which have a max range of 128 bytes.
 
@@ -1060,7 +1058,7 @@ void Assembler::j(Condition cc, Label* L, Label::Distance distance) {
     byte disp = 0x00;
     if (L->is_near_linked()) {
       int offset = L->near_link_pos() - pc_offset();
-      DCHECK(is_int8(offset));
+      assert(is_int8(offset));
       disp = static_cast<byte>(offset & 0xFF);
     }
     L->link_to(pc_offset(), Label::kNear);
@@ -1072,7 +1070,7 @@ void Assembler::j(Condition cc, Label* L, Label::Distance distance) {
     emitl(L->pos());
     L->link_to(pc_offset() - sizeof(int32_t));
   } else {
-    DCHECK(L->is_unused());
+    assert(L->is_unused());
     emit(0x0F);
     emit(0x80 | cc);
     int32_t current = pc_offset();
@@ -1083,9 +1081,9 @@ void Assembler::j(Condition cc, Label* L, Label::Distance distance) {
 
 
 void Assembler::j(Condition cc, Address entry, RelocInfo::Mode rmode) {
-  DCHECK(RelocInfo::IsRuntimeEntry(rmode));
+  assert(RelocInfo::IsRuntimeEntry(rmode));
   EnsureSpace ensure_space(this);
-  DCHECK(is_uint4(cc));
+  assert(is_uint4(cc));
   emit(0x0F);
   emit(0x80 | cc);
   emit_runtime_entry(entry, rmode);
@@ -1096,7 +1094,7 @@ void Assembler::j(Condition cc,
                   Handle<Code> target,
                   RelocInfo::Mode rmode) {
   EnsureSpace ensure_space(this);
-  DCHECK(is_uint4(cc));
+  assert(is_uint4(cc));
   // 0000 1111 1000 tttn #32-bit disp.
   emit(0x0F);
   emit(0x80 | cc);
@@ -1110,7 +1108,7 @@ void Assembler::jmp(Label* L, Label::Distance distance) {
   const int long_size = sizeof(int32_t);
   if (L->is_bound()) {
     int offs = L->pos() - pc_offset() - 1;
-    DCHECK(offs <= 0);
+    assert(offs <= 0);
     if (is_int8(offs - short_size) && !predictable_code_size()) {
       // 1110 1011 #8-bit disp.
       emit(0xEB);
@@ -1125,7 +1123,7 @@ void Assembler::jmp(Label* L, Label::Distance distance) {
     byte disp = 0x00;
     if (L->is_near_linked()) {
       int offset = L->near_link_pos() - pc_offset();
-      DCHECK(is_int8(offset));
+      assert(is_int8(offset));
       disp = static_cast<byte>(offset & 0xFF);
     }
     L->link_to(pc_offset(), Label::kNear);
@@ -1137,7 +1135,7 @@ void Assembler::jmp(Label* L, Label::Distance distance) {
     L->link_to(pc_offset() - long_size);
   } else {
     // 1110 1001 #32-bit disp.
-    DCHECK(L->is_unused());
+    assert(L->is_unused());
     emit(0xE9);
     int32_t current = pc_offset();
     emitl(current);
@@ -1155,9 +1153,9 @@ void Assembler::jmp(Handle<Code> target, RelocInfo::Mode rmode) {
 
 
 void Assembler::jmp(Address entry, RelocInfo::Mode rmode) {
-  DCHECK(RelocInfo::IsRuntimeEntry(rmode));
+  assert(RelocInfo::IsRuntimeEntry(rmode));
   EnsureSpace ensure_space(this);
-  DCHECK(RelocInfo::IsRuntimeEntry(rmode));
+  assert(RelocInfo::IsRuntimeEntry(rmode));
   emit(0xE9);
   emit_runtime_entry(entry, rmode);
 }
@@ -1196,7 +1194,7 @@ void Assembler::load_rax(void* value, RelocInfo::Mode mode) {
     emit(0xA1);
     emitp(value, mode);
   } else {
-    DCHECK(kPointerSize == kInt32Size);
+    assert(kPointerSize == kInt32Size);
     emit(0xA1);
     emitp(value, mode);
     // In 64-bit mode, need to zero extend the operand to 8 bytes.
@@ -1330,7 +1328,7 @@ void Assembler::emit_mov(Register dst, Immediate value, int size) {
     emit(0xC7);
     emit_modrm(0x0, dst);
   } else {
-    DCHECK(size == kInt32Size);
+    assert(size == kInt32Size);
     emit(0xB8 + dst.low_bits());
   }
   emit(value);
@@ -1376,13 +1374,13 @@ void Assembler::movl(const Operand& dst, Label* src) {
   emit_operand(0, dst);
   if (src->is_bound()) {
     int offset = src->pos() - pc_offset() - sizeof(int32_t);
-    DCHECK(offset <= 0);
+    assert(offset <= 0);
     emitl(offset);
   } else if (src->is_linked()) {
     emitl(src->pos());
     src->link_to(pc_offset() - sizeof(int32_t));
   } else {
-    DCHECK(src->is_unused());
+    assert(src->is_unused());
     int32_t current = pc_offset();
     emitl(current);
     src->link_to(current);
@@ -1739,7 +1737,7 @@ void Assembler::pushfq() {
 
 void Assembler::ret(int imm16) {
   EnsureSpace ensure_space(this);
-  DCHECK(is_uint16(imm16));
+  assert(is_uint16(imm16));
   if (imm16 == 0) {
     emit(0xC3);
   } else {
@@ -1756,7 +1754,7 @@ void Assembler::setcc(Condition cc, Register reg) {
     return;
   }
   EnsureSpace ensure_space(this);
-  DCHECK(is_uint4(cc));
+  assert(is_uint4(cc));
   if (!reg.is_byte_register()) {
     // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
     emit_rex_32(reg);
@@ -1818,7 +1816,7 @@ void Assembler::store_rax(void* dst, RelocInfo::Mode mode) {
     emit(0xA3);
     emitp(dst, mode);
   } else {
-    DCHECK(kPointerSize == kInt32Size);
+    assert(kPointerSize == kInt32Size);
     emit(0xA3);
     emitp(dst, mode);
     // In 64-bit mode, need to zero extend the operand to 8 bytes.
@@ -1852,7 +1850,7 @@ void Assembler::testb(Register dst, Register src) {
 
 
 void Assembler::testb(Register reg, Immediate mask) {
-  DCHECK(is_int8(mask.value_) || is_uint8(mask.value_));
+  assert(is_int8(mask.value_) || is_uint8(mask.value_));
   EnsureSpace ensure_space(this);
   if (reg.is(rax)) {
     emit(0xA8);
@@ -1870,7 +1868,7 @@ void Assembler::testb(Register reg, Immediate mask) {
 
 
 void Assembler::testb(const Operand& op, Immediate mask) {
-  DCHECK(is_int8(mask.value_) || is_uint8(mask.value_));
+  assert(is_int8(mask.value_) || is_uint8(mask.value_));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(rax, op);
   emit(0xF6);
@@ -2018,7 +2016,7 @@ void Assembler::fstp_d(const Operand& adr) {
 
 
 void Assembler::fstp(int index) {
-  DCHECK(is_uint3(index));
+  assert(is_uint3(index));
   EnsureSpace ensure_space(this);
   emit_farith(0xDD, 0xD8, index);
 }
@@ -2049,7 +2047,7 @@ void Assembler::fistp_s(const Operand& adr) {
 
 
 void Assembler::fisttp_s(const Operand& adr) {
-  DCHECK(IsEnabled(SSE3));
+  assert(IsEnabled(SSE3));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(adr);
   emit(0xDB);
@@ -2058,7 +2056,7 @@ void Assembler::fisttp_s(const Operand& adr) {
 
 
 void Assembler::fisttp_d(const Operand& adr) {
-  DCHECK(IsEnabled(SSE3));
+  assert(IsEnabled(SSE3));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(adr);
   emit(0xDD);
@@ -2311,15 +2309,15 @@ void Assembler::fnclex() {
 void Assembler::sahf() {
   // TODO(X64): Test for presence. Not all 64-bit intel CPU's have sahf
   // in 64-bit mode. Test CpuID.
-  DCHECK(IsEnabled(SAHF));
+  assert(IsEnabled(SAHF));
   EnsureSpace ensure_space(this);
   emit(0x9E);
 }
 
 
 void Assembler::emit_farith(int b1, int b2, int i) {
-  DCHECK(is_uint8(b1) && is_uint8(b2));  // wrong opcode
-  DCHECK(is_uint3(i));  // illegal stack offset
+  assert(is_uint8(b1) && is_uint8(b2));  // wrong opcode
+  assert(is_uint3(i));  // illegal stack offset
   emit(b1);
   emit(b2 + i);
 }
@@ -2555,8 +2553,8 @@ void Assembler::movdqu(XMMRegister dst, const Operand& src) {
 
 
 void Assembler::extractps(Register dst, XMMRegister src, byte imm8) {
-  DCHECK(IsEnabled(SSE4_1));
-  DCHECK(is_uint8(imm8));
+  assert(IsEnabled(SSE4_1));
+  assert(is_uint8(imm8));
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(src, dst);
@@ -2616,7 +2614,7 @@ void Assembler::movaps(XMMRegister dst, XMMRegister src) {
 
 
 void Assembler::shufps(XMMRegister dst, XMMRegister src, byte imm8) {
-  DCHECK(is_uint8(imm8));
+  assert(is_uint8(imm8));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(src, dst);
   emit(0x0F);
@@ -3140,7 +3138,7 @@ void Assembler::cmpltsd(XMMRegister dst, XMMRegister src) {
 
 void Assembler::roundsd(XMMRegister dst, XMMRegister src,
                         Assembler::RoundingMode mode) {
-  DCHECK(IsEnabled(SSE4_1));
+  assert(IsEnabled(SSE4_1));
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(dst, src);
@@ -3185,7 +3183,7 @@ void Assembler::pcmpeqd(XMMRegister dst, XMMRegister src) {
 // AVX instructions
 void Assembler::vfmasd(byte op, XMMRegister dst, XMMRegister src1,
                        XMMRegister src2) {
-  DCHECK(IsEnabled(FMA3));
+  assert(IsEnabled(FMA3));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(dst, src1, src2, kLIG, k66, k0F38, kW1);
   emit(op);
@@ -3195,7 +3193,7 @@ void Assembler::vfmasd(byte op, XMMRegister dst, XMMRegister src1,
 
 void Assembler::vfmasd(byte op, XMMRegister dst, XMMRegister src1,
                        const Operand& src2) {
-  DCHECK(IsEnabled(FMA3));
+  assert(IsEnabled(FMA3));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(dst, src1, src2, kLIG, k66, k0F38, kW1);
   emit(op);
@@ -3205,7 +3203,7 @@ void Assembler::vfmasd(byte op, XMMRegister dst, XMMRegister src1,
 
 void Assembler::vfmass(byte op, XMMRegister dst, XMMRegister src1,
                        XMMRegister src2) {
-  DCHECK(IsEnabled(FMA3));
+  assert(IsEnabled(FMA3));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(dst, src1, src2, kLIG, k66, k0F38, kW0);
   emit(op);
@@ -3215,7 +3213,7 @@ void Assembler::vfmass(byte op, XMMRegister dst, XMMRegister src1,
 
 void Assembler::vfmass(byte op, XMMRegister dst, XMMRegister src1,
                        const Operand& src2) {
-  DCHECK(IsEnabled(FMA3));
+  assert(IsEnabled(FMA3));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(dst, src1, src2, kLIG, k66, k0F38, kW0);
   emit(op);
@@ -3225,7 +3223,7 @@ void Assembler::vfmass(byte op, XMMRegister dst, XMMRegister src1,
 
 void Assembler::vsd(byte op, XMMRegister dst, XMMRegister src1,
                     XMMRegister src2) {
-  DCHECK(IsEnabled(AVX));
+  assert(IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(dst, src1, src2, kLIG, kF2, k0F, kWIG);
   emit(op);
@@ -3235,7 +3233,7 @@ void Assembler::vsd(byte op, XMMRegister dst, XMMRegister src1,
 
 void Assembler::vsd(byte op, XMMRegister dst, XMMRegister src1,
                     const Operand& src2) {
-  DCHECK(IsEnabled(AVX));
+  assert(IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_vex_prefix(dst, src1, src2, kLIG, kF2, k0F, kWIG);
   emit(op);
@@ -3285,7 +3283,7 @@ void Assembler::dd(uint32_t data) {
 // Relocation information implementations.
 
 void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
-  DCHECK(!RelocInfo::IsNone(rmode));
+  assert(!RelocInfo::IsNone(rmode));
   // Don't record external references unless the heap will be serialized.
   if (rmode == RelocInfo::EXTERNAL_REFERENCE &&
       !serializer_enabled() && !emit_debug_code()) {
@@ -3323,14 +3321,14 @@ void Assembler::RecordComment(const char* msg, bool force) {
 
 Handle<ConstantPoolArray> Assembler::NewConstantPool(Isolate* isolate) {
   // No out-of-line constant pool support.
-  DCHECK(!FLAG_enable_ool_constant_pool);
+  assert(!FLAG_enable_ool_constant_pool);
   return isolate->factory()->empty_constant_pool_array();
 }
 
 
 void Assembler::PopulateConstantPool(ConstantPoolArray* constant_pool) {
   // No out-of-line constant pool support.
-  DCHECK(!FLAG_enable_ool_constant_pool);
+  assert(!FLAG_enable_ool_constant_pool);
   return;
 }
 
@@ -3355,5 +3353,3 @@ bool RelocInfo::IsInConstantPool() {
 
 
 } }  // namespace v8::internal
-
-#endif  // V8_TARGET_ARCH_X64

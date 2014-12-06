@@ -5,11 +5,11 @@
 #ifndef V8_X64_ASSEMBLER_X64_INL_H_
 #define V8_X64_ASSEMBLER_X64_INL_H_
 
-#include "src/x64/assembler-x64.h"
+#include "asm_writing/x64/assembler-x64.h"
 
-#include "src/base/cpu.h"
-#include "src/debug.h"
-#include "src/v8memory.h"
+//#include "src/base/cpu.h"
+//#include "src/debug.h"
+//#include "src/v8memory.h"
 
 namespace v8 {
 namespace internal {
@@ -57,7 +57,7 @@ void Assembler::emitw(uint16_t x) {
 void Assembler::emit_code_target(Handle<Code> target,
                                  RelocInfo::Mode rmode,
                                  TypeFeedbackId ast_id) {
-  DCHECK(RelocInfo::IsCodeTarget(rmode) ||
+  assert(RelocInfo::IsCodeTarget(rmode) ||
       rmode == RelocInfo::CODE_AGE_SEQUENCE);
   if (rmode == RelocInfo::CODE_TARGET && !ast_id.IsNone()) {
     RecordRelocInfo(RelocInfo::CODE_TARGET_WITH_ID, ast_id.ToInt());
@@ -76,7 +76,7 @@ void Assembler::emit_code_target(Handle<Code> target,
 
 
 void Assembler::emit_runtime_entry(Address entry, RelocInfo::Mode rmode) {
-  DCHECK(RelocInfo::IsRuntimeEntry(rmode));
+  assert(RelocInfo::IsRuntimeEntry(rmode));
   RecordRelocInfo(rmode);
   emitl(static_cast<uint32_t>(entry - isolate()->code_range()->start()));
 }
@@ -108,7 +108,7 @@ void Assembler::emit_rex_64(XMMRegister reg, const Operand& op) {
 
 
 void Assembler::emit_rex_64(Register rm_reg) {
-  DCHECK_EQ(rm_reg.code() & 0xf, rm_reg.code());
+  assert(rm_reg.code() & 0xf == rm_reg.code());
   emit(0x48 | rm_reg.high_bit());
 }
 
@@ -308,13 +308,13 @@ void RelocInfo::apply(intptr_t delta, ICacheFlushMode icache_flush_mode) {
 
 
 Address RelocInfo::target_address() {
-  DCHECK(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_));
+  assert(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_));
   return Assembler::target_address_at(pc_, host_);
 }
 
 
 Address RelocInfo::target_address_address() {
-  DCHECK(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_)
+  assert(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_)
                               || rmode_ == EMBEDDED_OBJECT
                               || rmode_ == EXTERNAL_REFERENCE);
   return reinterpret_cast<Address>(pc_);
@@ -339,7 +339,7 @@ int RelocInfo::target_address_size() {
 void RelocInfo::set_target_address(Address target,
                                    WriteBarrierMode write_barrier_mode,
                                    ICacheFlushMode icache_flush_mode) {
-  DCHECK(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_));
+  assert(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_));
   Assembler::set_target_address_at(pc_, host_, target, icache_flush_mode);
   if (write_barrier_mode == UPDATE_WRITE_BARRIER && host() != NULL &&
       IsCodeTarget(rmode_)) {
@@ -351,13 +351,13 @@ void RelocInfo::set_target_address(Address target,
 
 
 Object* RelocInfo::target_object() {
-  DCHECK(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
+  assert(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
   return Memory::Object_at(pc_);
 }
 
 
 Handle<Object> RelocInfo::target_object_handle(Assembler* origin) {
-  DCHECK(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
+  assert(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
   if (rmode_ == EMBEDDED_OBJECT) {
     return Memory::Object_Handle_at(pc_);
   } else {
@@ -367,7 +367,7 @@ Handle<Object> RelocInfo::target_object_handle(Assembler* origin) {
 
 
 Address RelocInfo::target_reference() {
-  DCHECK(rmode_ == RelocInfo::EXTERNAL_REFERENCE);
+  assert(rmode_ == RelocInfo::EXTERNAL_REFERENCE);
   return Memory::Address_at(pc_);
 }
 
@@ -375,7 +375,7 @@ Address RelocInfo::target_reference() {
 void RelocInfo::set_target_object(Object* target,
                                   WriteBarrierMode write_barrier_mode,
                                   ICacheFlushMode icache_flush_mode) {
-  DCHECK(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
+  assert(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
   Memory::Object_at(pc_) = target;
   if (icache_flush_mode != SKIP_ICACHE_FLUSH) {
     CpuFeatures::FlushICache(pc_, sizeof(Address));
@@ -390,7 +390,7 @@ void RelocInfo::set_target_object(Object* target,
 
 
 Address RelocInfo::target_runtime_entry(Assembler* origin) {
-  DCHECK(IsRuntimeEntry(rmode_));
+  assert(IsRuntimeEntry(rmode_));
   return origin->runtime_entry_at(pc_);
 }
 
@@ -398,7 +398,7 @@ Address RelocInfo::target_runtime_entry(Assembler* origin) {
 void RelocInfo::set_target_runtime_entry(Address target,
                                          WriteBarrierMode write_barrier_mode,
                                          ICacheFlushMode icache_flush_mode) {
-  DCHECK(IsRuntimeEntry(rmode_));
+  assert(IsRuntimeEntry(rmode_));
   if (target_address() != target) {
     set_target_address(target, write_barrier_mode, icache_flush_mode);
   }
@@ -406,14 +406,14 @@ void RelocInfo::set_target_runtime_entry(Address target,
 
 
 Handle<Cell> RelocInfo::target_cell_handle() {
-  DCHECK(rmode_ == RelocInfo::CELL);
+  assert(rmode_ == RelocInfo::CELL);
   Address address = Memory::Address_at(pc_);
   return Handle<Cell>(reinterpret_cast<Cell**>(address));
 }
 
 
 Cell* RelocInfo::target_cell() {
-  DCHECK(rmode_ == RelocInfo::CELL);
+  assert(rmode_ == RelocInfo::CELL);
   return Cell::FromValueAddress(Memory::Address_at(pc_));
 }
 
@@ -421,7 +421,7 @@ Cell* RelocInfo::target_cell() {
 void RelocInfo::set_target_cell(Cell* cell,
                                 WriteBarrierMode write_barrier_mode,
                                 ICacheFlushMode icache_flush_mode) {
-  DCHECK(rmode_ == RelocInfo::CELL);
+  assert(rmode_ == RelocInfo::CELL);
   Address address = cell->address() + Cell::kValueOffset;
   Memory::Address_at(pc_) = address;
   if (icache_flush_mode != SKIP_ICACHE_FLUSH) {
@@ -467,15 +467,15 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 
 
 Handle<Object> RelocInfo::code_age_stub_handle(Assembler* origin) {
-  DCHECK(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
-  DCHECK(*pc_ == kCallOpcode);
+  assert(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  assert(*pc_ == kCallOpcode);
   return origin->code_target_object_handle_at(pc_ + 1);
 }
 
 
 Code* RelocInfo::code_age_stub() {
-  DCHECK(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
-  DCHECK(*pc_ == kCallOpcode);
+  assert(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  assert(*pc_ == kCallOpcode);
   return Code::GetCodeFromTargetAddress(
       Assembler::target_address_at(pc_ + 1, host_));
 }
@@ -483,15 +483,15 @@ Code* RelocInfo::code_age_stub() {
 
 void RelocInfo::set_code_age_stub(Code* stub,
                                   ICacheFlushMode icache_flush_mode) {
-  DCHECK(*pc_ == kCallOpcode);
-  DCHECK(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  assert(*pc_ == kCallOpcode);
+  assert(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
   Assembler::set_target_address_at(pc_ + 1, host_, stub->instruction_start(),
                                    icache_flush_mode);
 }
 
 
 Address RelocInfo::call_address() {
-  DCHECK((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
+  assert((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
          (IsDebugBreakSlot(rmode()) && IsPatchedDebugBreakSlotSequence()));
   return Memory::Address_at(
       pc_ + Assembler::kRealPatchReturnSequenceAddressOffset);
@@ -499,7 +499,7 @@ Address RelocInfo::call_address() {
 
 
 void RelocInfo::set_call_address(Address target) {
-  DCHECK((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
+  assert((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
          (IsDebugBreakSlot(rmode()) && IsPatchedDebugBreakSlotSequence()));
   Memory::Address_at(pc_ + Assembler::kRealPatchReturnSequenceAddressOffset) =
       target;
@@ -524,7 +524,7 @@ void RelocInfo::set_call_object(Object* target) {
 
 
 Object** RelocInfo::call_object_address() {
-  DCHECK((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
+  assert((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
          (IsDebugBreakSlot(rmode()) && IsPatchedDebugBreakSlotSequence()));
   return reinterpret_cast<Object**>(
       pc_ + Assembler::kPatchReturnSequenceAddressOffset);
@@ -588,7 +588,7 @@ void RelocInfo::Visit(Heap* heap) {
 // Implementation of Operand
 
 void Operand::set_modrm(int mod, Register rm_reg) {
-  DCHECK(is_uint2(mod));
+  assert(is_uint2(mod));
   buf_[0] = mod << 6 | rm_reg.low_bits();
   // Set REX.B to the high bit of rm.code().
   rex_ |= rm_reg.high_bit();
@@ -596,26 +596,26 @@ void Operand::set_modrm(int mod, Register rm_reg) {
 
 
 void Operand::set_sib(ScaleFactor scale, Register index, Register base) {
-  DCHECK(len_ == 1);
-  DCHECK(is_uint2(scale));
+  assert(len_ == 1);
+  assert(is_uint2(scale));
   // Use SIB with no index register only for base rsp or r12. Otherwise we
   // would skip the SIB byte entirely.
-  DCHECK(!index.is(rsp) || base.is(rsp) || base.is(r12));
+  assert(!index.is(rsp) || base.is(rsp) || base.is(r12));
   buf_[1] = (scale << 6) | (index.low_bits() << 3) | base.low_bits();
   rex_ |= index.high_bit() << 1 | base.high_bit();
   len_ = 2;
 }
 
 void Operand::set_disp8(int disp) {
-  DCHECK(is_int8(disp));
-  DCHECK(len_ == 1 || len_ == 2);
+  assert(is_int8(disp));
+  assert(len_ == 1 || len_ == 2);
   int8_t* p = reinterpret_cast<int8_t*>(&buf_[len_]);
   *p = disp;
   len_ += sizeof(int8_t);
 }
 
 void Operand::set_disp32(int disp) {
-  DCHECK(len_ == 1 || len_ == 2);
+  assert(len_ == 1 || len_ == 2);
   int32_t* p = reinterpret_cast<int32_t*>(&buf_[len_]);
   *p = disp;
   len_ += sizeof(int32_t);
