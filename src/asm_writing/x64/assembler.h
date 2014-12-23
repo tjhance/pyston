@@ -35,26 +35,42 @@
 #ifndef V8_ASSEMBLER_H_
 #define V8_ASSEMBLER_H_
 
-#include "src/v8.h"
-
-#include "src/allocation.h"
-#include "src/builtins.h"
-#include "src/gdb-jit.h"
-#include "src/isolate.h"
-#include "src/runtime/runtime.h"
-#include "src/token.h"
-
 namespace v8 {
 
 class ApiFunction;
 
 namespace internal {
 
+////////////////////////////////////////////////////////////////////////
+// Random stuff from other header files in V8 that I'm cramming in here
+
+// A macro is used for defining the base class used for embedded instances.
+// The reason is some compilers allocate a minimum of one word for the
+// superclass. The macro prevents the use of new & delete in debug mode.
+// In release mode we are not willing to pay this overhead.
+#ifdef DEBUG
+// Superclass for classes with instances allocated inside stack
+// activations or inside other objects.
+class Embedded {
+ public:
+  void* operator new(size_t size);
+  void  operator delete(void* p); 
+};
+#define BASE_EMBEDDED : public Embedded
+#else
+#define BASE_EMBEDDED
+#endif
+
+constexpr int kPointerSize = sizeof(void*);
+typedef uint8_t byte;
+
+////////////////////////////////////////////////////////////////////////
+
 class StatsCounter;
 // -----------------------------------------------------------------------------
 // Platform independent assembler base class.
 
-class AssemblerBase: public Malloced {
+class AssemblerBase {
  public:
   AssemblerBase(Isolate* isolate, void* buffer, int buffer_size);
   virtual ~AssemblerBase();
@@ -696,7 +712,7 @@ class RelocInfoWriter BASE_EMBEDDED {
 //   }
 //
 // A mask can be specified to skip unwanted modes.
-class RelocIterator: public Malloced {
+class RelocIterator {
  public:
   // Create a new iterator positioned at
   // the beginning of the reloc info.

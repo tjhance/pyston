@@ -40,7 +40,7 @@
 #include <cassert>
 #include <cinttypes>
 
-#include "asm_writing/x64/v8-header.h"
+#include "asm_writing/x64/assembler.h"
 
 namespace v8 {
 namespace internal {
