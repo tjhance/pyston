@@ -81,3 +81,18 @@ print "hello world"[False:True:True]
 
 print "{hello}".format(hello="world")
 print "%.3s" % "hello world"
+
+def test_just_funcs(s, w):
+    t1 = s.ljust(w, 'x')
+    t2 = s.rjust(w, 'x')
+    t3 = s.center(w, 'x')
+
+    print t1, t1 == s, t1 is s, type(t1)
+    print t2, t2 == s, t2 is s, type(t2)
+    print t3, t3 == s, t3 is s, type(t3)
+
+test_just_funcs("abcd", 3)
+test_just_funcs("abcd", 4)
+test_just_funcs("abcd", 5)
+test_just_funcs("abcd", 6)
+test_just_funcs("abcd", 7)
