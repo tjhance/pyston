@@ -340,6 +340,8 @@ public:
         return true;
     }
 
+    virtual bool visit_exec(AST_Exec* node) { return true; }
+
     friend class DefinednessBBAnalyzer;
 };
 

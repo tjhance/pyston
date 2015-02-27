@@ -30,6 +30,7 @@
 #include "codegen/parser.h"
 #include "codegen/patchpoints.h"
 #include "codegen/stackmaps.h"
+#include "codegen/unwinding.h"
 #include "core/ast.h"
 #include "core/cfg.h"
 #include "core/common.h"
@@ -44,7 +45,8 @@ namespace pyston {
 
 // TODO terrible place for these!
 ParamNames::ParamNames(AST* ast) : takes_param_names(true) {
-    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression) {
+    if (ast->type == AST_TYPE::Module || ast->type == AST_TYPE::ClassDef || ast->type == AST_TYPE::Expression
+        || ast->type == AST_TYPE::Suite) {
         kwarg = "";
         vararg = "";
     } else if (ast->type == AST_TYPE::FunctionDef || ast->type == AST_TYPE::Lambda) {
@@ -95,6 +97,7 @@ const std::string SourceInfo::getName() {
             return "<lambda>";
         case AST_TYPE::Module:
         case AST_TYPE::Expression:
+        case AST_TYPE::Suite:
             return "<module>";
         default:
             RELEASE_ASSERT(0, "%d", ast->type);
@@ -336,6 +339,44 @@ Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module) {
     parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
 
     return compileAndRunExpression(parsedExpr, module, locals);
+}
+
+static Box* compileAndRunExec(AST_Suite* suite, BoxedModule* bm, BoxedDict* locals) {
+    CompiledFunction* cf;
+
+    { // scope for limiting the locked region:
+        LOCK_REGION(codegen_rwlock.asWrite());
+
+        Timer _t("for compileExec()");
+
+        ScopingAnalysis* scoping = new ScopingAnalysis(suite);
+
+        SourceInfo* si = new SourceInfo(bm, scoping, suite, suite->body);
+        CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
+
+        EffortLevel effort = EffortLevel::INTERPRETED;
+
+        cf = compileFunction(cl_f, new FunctionSpecialization(VOID), effort, NULL);
+        assert(cf->clfunc->versions.size());
+    }
+
+    return astInterpretFunctionEval(cf, locals);
+}
+
+Box* runExec(Box* boxedCode) {
+    // TODO implement full functionality (globals and locals)
+    RELEASE_ASSERT(boxedCode->cls == str_cls, "eval not implemented for non-strings");
+
+    BoxedDict* locals = getLocals(true /* only_user_visible */, true /* includeClosure */);
+    BoxedModule* module = getCurrentModule();
+    const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
+
+    // TODO hacky way to parse
+    AST_Module* parsedModule = parse_string(code);
+    AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
+    parsedSuite->body = parsedModule->body;
+
+    return compileAndRunExec(parsedSuite, module, locals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

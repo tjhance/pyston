@@ -1608,6 +1608,19 @@ private:
         func->decvref(emitter);
     }
 
+    void doExec(AST_Exec* node, UnwindInfo unw_info) {
+        // TODO locals and globals
+        RELEASE_ASSERT(!node->globals, "do not support exec with globals or locals yet");
+        assert(!node->locals);
+
+        CompilerVariable* body = evalExpr(node->body, unw_info);
+        ConcreteCompilerVariable* cbody = body->makeConverted(emitter, body->getBoxType());
+
+        emitter.createCall(unw_info, g.funcs.runExec, cbody->getValue());
+
+        body->decvref(emitter);
+    }
+
     void doPrint(AST_Print* node, UnwindInfo unw_info) {
         ConcreteCompilerVariable* dest = NULL;
         if (node->dest) {
@@ -1978,6 +1991,9 @@ private:
                 break;
             case AST_TYPE::Delete:
                 doDelete(ast_cast<AST_Delete>(node), unw_info);
+                break;
+            case AST_TYPE::Exec:
+                doExec(ast_cast<AST_Exec>(node), unw_info);
                 break;
             case AST_TYPE::Expr:
                 doExpr(ast_cast<AST_Expr>(node), unw_info);

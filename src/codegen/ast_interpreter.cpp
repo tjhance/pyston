@@ -82,6 +82,7 @@ private:
     Value visit_classDef(AST_ClassDef* node);
     Value visit_compare(AST_Compare* node);
     Value visit_delete(AST_Delete* node);
+    Value visit_exec(AST_Exec* node);
     Value visit_functionDef(AST_FunctionDef* node);
     Value visit_global(AST_Global* node);
     Value visit_module(AST_Module* node);
@@ -616,6 +617,8 @@ Value ASTInterpreter::visit_stmt(AST_stmt* node) {
             return visit_classDef((AST_ClassDef*)node);
         case AST_TYPE::Delete:
             return visit_delete((AST_Delete*)node);
+        case AST_TYPE::Exec:
+            return visit_exec((AST_Exec*)node);
         case AST_TYPE::Expr:
             return visit_expr((AST_Expr*)node);
         case AST_TYPE::FunctionDef:
@@ -850,6 +853,17 @@ Value ASTInterpreter::visit_print(AST_Print* node) {
             softspace(dest, false);
         }
     }
+    return Value();
+}
+
+Value ASTInterpreter::visit_exec(AST_Exec* node) {
+    RELEASE_ASSERT(!node->globals, "do not support exec with globals or locals yet");
+    assert(!node->locals);
+
+    // TODO implement the locals and globals arguments
+    Box* code = visit_expr(node->body).o;
+    runExec(code);
+
     return Value();
 }
 

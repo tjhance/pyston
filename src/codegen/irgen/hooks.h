@@ -38,6 +38,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm);
 CompiledFunction* cfForMachineFunctionName(const std::string&);
 
 Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module);
+extern "C" Box* runExec(Box* boxedCode);
 }
 
 #endif

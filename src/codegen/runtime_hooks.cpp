@@ -221,6 +221,8 @@ void initGlobalFuncs(GlobalState& g) {
     GET(listAppendInternal);
     GET(getSysStdout);
 
+    GET(runExec);
+
     g.funcs.runtimeCall = getFunc((void*)runtimeCall, "runtimeCall");
     g.funcs.runtimeCall0 = addFunc((void*)runtimeCall, g.llvm_value_type_ptr, g.llvm_value_type_ptr, g.i32);
     g.funcs.runtimeCall1

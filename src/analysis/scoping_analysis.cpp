@@ -315,6 +315,7 @@ public:
     bool visit_list(AST_List* node) override { return false; }
     bool visit_listcomp(AST_ListComp* node) override { return false; }
     bool visit_expression(AST_Expression* node) override { return false; }
+    bool visit_suite(AST_Suite* node) override { return false; }
     // bool visit_module(AST_Module *node) override { return false; }
     // bool visit_name(AST_Name *node) override { return false; }
     bool visit_num(AST_Num* node) override { return false; }
@@ -554,6 +555,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 
         switch (node->type) {
             case AST_TYPE::Expression:
+            case AST_TYPE::Suite:
             case AST_TYPE::ClassDef: {
                 ScopeInfoBase* scopeInfo
                     = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */);
@@ -631,5 +633,10 @@ ScopingAnalysis* runScopingAnalysis(AST_Module* m) {
 ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
     auto scope_info = getScopeInfoForNode(e);
     scopes[e] = scope_info;
+}
+
+ScopingAnalysis::ScopingAnalysis(AST_Suite* s) : interned_strings(*s->interned_strings.get()) {
+    auto scope_info = getScopeInfoForNode(s);
+    scopes[s] = scope_info;
 }
 }
