@@ -528,6 +528,7 @@ std::string formatException(Box* e);
 // The traceback given to the user will include this,
 // even though the execution didn't actually arrive there.
 void raiseSyntaxError(const char* msg, int lineno, int col_offset, const std::string& file, const std::string& func);
+void raiseSyntaxErrorHelper(const std::string& file, const std::string& func, AST* node_at, const char* msg, ...);
 
 struct LineInfo {
 public:
@@ -557,7 +558,12 @@ struct FrameInfo {
     // - This makes frame entering+leaving faster at the expense of slower exceptions.
     ExcInfo exc;
 
-    FrameInfo(ExcInfo exc) : exc(exc) {}
+    // Not ALL the locals!
+    // In general, the locals for a frame are a union of (i) on the stack (ii) in the closure
+    // if it exists, and (iii) in this dict if it exists.
+    Box* locals_dict;
+
+    FrameInfo(ExcInfo exc) : exc(exc), locals_dict(NULL) {}
 };
 }
 

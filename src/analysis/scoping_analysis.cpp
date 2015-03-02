@@ -18,6 +18,7 @@
 
 #include "core/ast.h"
 #include "core/common.h"
+#include "core/types.h"
 #include "core/util.h"
 
 namespace pyston {
@@ -130,8 +131,18 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet got_from_closure;
     StrSet passthrough_accesses; // what names a child scope accesses a name from a parent scope
 
+    // `import *` and `exec` both force the scope to use the NAME lookup
+    bool hasNameForcingSyntax;
+    AST_ImportFrom* nameForcingNodeImportStar;
+    AST_Exec* nameForcingNodeBareExec;
+
+    // If it has a free variable / if any child has a free variable
+    bool free;
+    bool child_free;
+
     ScopeNameUsage(AST* node, ScopeNameUsage* parent, ScopingAnalysis* scoping)
-        : node(node), parent(parent), scoping(scoping) {
+        : node(node), parent(parent), scoping(scoping), hasNameForcingSyntax(false), nameForcingNodeImportStar(NULL),
+          nameForcingNodeBareExec(NULL), free(false), child_free(false) {
         if (node->type == AST_TYPE::ClassDef) {
             AST_ClassDef* classdef = ast_cast<AST_ClassDef>(node);
 
@@ -269,6 +280,18 @@ public:
     void doRead(InternedString name) {
         assert(name == mangleName(name, cur->private_name, scoping->getInternedStrings()));
         cur->read.insert(name);
+    }
+
+    void doImportStar(AST_ImportFrom* node) {
+        if (cur->nameForcingNodeImportStar == NULL)
+            cur->nameForcingNodeImportStar = node;
+        cur->hasNameForcingSyntax = true;
+    }
+
+    void doBareExec(AST_Exec* node) {
+        if (cur->nameForcingNodeBareExec == NULL)
+            cur->nameForcingNodeBareExec = node;
+        cur->hasNameForcingSyntax = true;
     }
 
     bool visit_name(AST_Name* node) override {
@@ -460,14 +483,25 @@ public:
     bool visit_importfrom(AST_ImportFrom* node) override {
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
-            mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
-            mangleNameInPlace(alias->name, cur->private_name, scoping->getInternedStrings());
-            if (alias->asname.str().size())
-                doWrite(alias->asname);
-            else
-                doWrite(alias->name);
+            if (alias->asname.str() == std::string("*")) {
+                doImportStar(node);
+            } else {
+                mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
+                mangleNameInPlace(alias->name, cur->private_name, scoping->getInternedStrings());
+                if (alias->asname.str().size())
+                    doWrite(alias->asname);
+                else
+                    doWrite(alias->name);
+            }
         }
         return true;
+    }
+
+    bool visit_exec(AST_Exec* node) override {
+        if (node->locals == NULL) {
+            doBareExec(node);
+        }
+        return false;
     }
 
     static void collect(AST* node, ScopingAnalysis::NameUsageMap* map, ScopingAnalysis* scoping) {
@@ -504,15 +538,47 @@ static std::vector<ScopingAnalysis::ScopeNameUsage*> sortNameUsages(ScopingAnaly
     return rtn;
 }
 
+static void raiseNameForcingSyntaxError(const char* msg, ScopingAnalysis::ScopeNameUsage* usage) {
+    assert(usage->node->type == AST_TYPE::FunctionDef);
+
+    AST_FunctionDef* funcNode = static_cast<AST_FunctionDef*>(usage->node);
+    int lineno;
+
+    const char* syntaxElemMsg;
+    if (usage->nameForcingNodeImportStar && usage->nameForcingNodeBareExec) {
+        syntaxElemMsg = "function '%s' uses import * and bare exec, which are illegal because it %s";
+        lineno = std::min(usage->nameForcingNodeImportStar->lineno, usage->nameForcingNodeBareExec->lineno);
+    } else if (usage->nameForcingNodeImportStar) {
+        syntaxElemMsg = "import * is not allowed in function '%s' because it %s";
+        lineno = usage->nameForcingNodeImportStar->lineno;
+    } else {
+        syntaxElemMsg = "unqualified exec is not allowed in function '%.100s' it %s";
+        lineno = usage->nameForcingNodeBareExec->lineno;
+    }
+
+    char buf[1024];
+    snprintf(buf, sizeof(buf), syntaxElemMsg, funcNode->name.c_str(), msg);
+    raiseSyntaxError(buf, lineno, 0, "" /* file?? */, funcNode->name.str());
+}
+
 void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
+    printf("hello\n");
+
     // Resolve name lookups:
     for (const auto& p : *usages) {
         ScopeNameUsage* usage = p.second;
+
+        if (usage->hasNameForcingSyntax) printf("moo!\n");
         for (const auto& name : usage->read) {
             if (usage->forced_globals.count(name))
                 continue;
             if (usage->written.count(name))
                 continue;
+
+            usage->free = true;
+            for (ScopeNameUsage* parent = usage->parent; parent != NULL; parent = parent->parent) {
+                parent->child_free = true;
+            }
 
             std::vector<ScopeNameUsage*> intermediate_parents;
 
@@ -540,6 +606,16 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
         }
     }
 
+    for (const auto& p : *usages) {
+        ScopeNameUsage* usage = p.second;
+        printf("%d %d\n", (int)usage->hasNameForcingSyntax, (int)(usage->node->type == AST_TYPE::FunctionDef));
+        if (usage->hasNameForcingSyntax && usage->node->type == AST_TYPE::FunctionDef) {
+            if (usage->child_free)
+                raiseNameForcingSyntaxError("contains a nested function with free variables", usage);
+            else if (usage->child_free)
+                raiseNameForcingSyntaxError("is a nested function", usage);
+        }
+    }
 
     std::vector<ScopeNameUsage*> sorted_usages = sortNameUsages(usages);
 
@@ -561,8 +637,8 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::FunctionDef:
             case AST_TYPE::Lambda:
             case AST_TYPE::GeneratorExp: {
-                ScopeInfoBase* scopeInfo
-                    = new ScopeInfoBase(parent_info, usage, usage->node, false /* usesNameLookup */);
+                ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node,
+                                                             usage->hasNameForcingSyntax /* usesNameLookup */);
                 this->scopes[node] = scopeInfo;
                 break;
             }
@@ -620,10 +696,6 @@ ScopeInfo* ScopingAnalysis::getScopeInfoForNode(AST* node) {
 
 ScopingAnalysis::ScopingAnalysis(AST_Module* m) : parent_module(m), interned_strings(*m->interned_strings.get()) {
     scopes[m] = new ModuleScopeInfo();
-}
-
-ScopingAnalysis* runScopingAnalysis(AST_Module* m) {
-    return new ScopingAnalysis(m);
 }
 
 ScopingAnalysis::ScopingAnalysis(AST_Expression* e) : interned_strings(*e->interned_strings.get()) {
