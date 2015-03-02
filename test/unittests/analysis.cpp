@@ -26,7 +26,7 @@ TEST_F(AnalysisTest, augassign) {
     AST_Module* module = caching_parse_file(fn.c_str());
     assert(module);
 
-    ScopingAnalysis *scoping = runScopingAnalysis(module);
+    ScopingAnalysis *scoping = new ScopingAnalysis(module);
 
     assert(module->body[0]->type == AST_TYPE::FunctionDef);
     AST_FunctionDef* func = static_cast<AST_FunctionDef*>(module->body[0]);

@@ -106,8 +106,6 @@ public:
     InternedStringPool& getInternedStrings();
 };
 
-ScopingAnalysis* runScopingAnalysis(AST_Module* m);
-
 bool containsYield(AST* ast);
 }
 

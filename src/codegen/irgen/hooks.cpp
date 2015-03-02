@@ -288,7 +288,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
 
         bm->future_flags = getFutureFlags(m, bm->fn.c_str());
 
-        ScopingAnalysis* scoping = runScopingAnalysis(m);
+        ScopingAnalysis* scoping = new ScopingAnalysis(m);
 
         SourceInfo* si = new SourceInfo(bm, scoping, m, m->body);
         CLFunction* cl_f = new CLFunction(0, 0, false, false, si);
