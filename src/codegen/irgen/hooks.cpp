@@ -367,7 +367,7 @@ Box* runExec(Box* boxedCode) {
     // TODO implement full functionality (globals and locals)
     RELEASE_ASSERT(boxedCode->cls == str_cls, "eval not implemented for non-strings");
 
-    BoxedDict* locals = getLocals(true /* only_user_visible */, true /* includeClosure */);
+    BoxedDict* locals = fastLocalsToDict(true /* only_user_visible */, true /* includeClosure */);
     BoxedModule* module = getCurrentModule();
     const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
 

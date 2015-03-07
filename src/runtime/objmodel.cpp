@@ -155,7 +155,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
     static StatCounter num_deopt("num_deopt");
     num_deopt.log();
 
-    auto locals = getLocals(false /* filter */, false /* includeClosure */);
+    auto locals = getStackLocalsIncludingUserHidden();
     auto execution_point = getExecutionPoint();
 
     // Should we only do this selectively?

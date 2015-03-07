@@ -557,8 +557,10 @@ struct FrameInfo {
     ExcInfo exc;
 
     // Not ALL the locals!
-    // In general, the locals for a frame are a union of (i) on the stack (ii) in the closure
-    // if it exists, and (iii) in this dict if it exists.
+    // In general, the locals for a frame are a union of
+    // (i) on the stack
+    // (ii) in the closure if it exists, and
+    // (iii) in this dict if it exists.
     Box* locals_dict;
 
     FrameInfo(ExcInfo exc) : exc(exc), locals_dict(NULL) {}

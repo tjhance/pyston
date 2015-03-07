@@ -128,6 +128,7 @@ private:
     ExcInfo last_exception;
     BoxedClosure* passed_closure, *created_closure;
     BoxedGenerator* generator;
+    Box* boxedLocals;
     unsigned edgecount;
     FrameInfo frame_info;
 
@@ -140,6 +141,7 @@ public:
     CompiledFunction* getCF() { return compiled_func; }
     FrameInfo* getFrameInfo() { return &frame_info; }
     BoxedClosure* getPassedClosure() { return passed_closure; }
+    Box* getBoxedLocals();
     const SymMap& getSymbolTable() { return sym_table; }
     const ScopeInfo* getScopeInfo() { return scope_info; }
 
@@ -147,10 +149,10 @@ public:
     void setGenerator(Box* gen);
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
+    void setBoxedLocals(Box*);
 
     void gcVisit(GCVisitor* visitor);
 };
-
 
 void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_duplicates) {
     if (!allow_duplicates)
@@ -173,6 +175,17 @@ void ASTInterpreter::setCreatedClosure(Box* closure) {
     this->created_closure = static_cast<BoxedClosure*>(closure);
 }
 
+void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
+    this->boxedLocals = boxedLocals;
+}
+
+Box* ASTInterpreter::getBoxedLocals() {
+    if (this->boxedLocals == NULL) {
+        this->boxedLocals = new BoxedDict();
+    }
+    return this->boxedLocals;
+}
+
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
     for (const auto& p2 : getSymbolTable()) {
         visitor->visitPotential(p2.second);
@@ -184,11 +197,13 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
         visitor->visit(created_closure);
     if (generator)
         visitor->visit(generator);
+    if (locals)
+        visitor->visit(locals);
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
     : compiled_func(compiled_function), source_info(compiled_function->clfunc->source), scope_info(0), current_block(0),
-      current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0), generator(0),
+      current_inst(0), last_exception(NULL, NULL, NULL), passed_closure(0), created_closure(0), generator(0), locals(0),
       edgecount(0), frame_info(ExcInfo(NULL, NULL, NULL)) {
 
     CLFunction* f = compiled_function->clfunc;
@@ -1148,34 +1163,27 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* locals) {
+Box* astInterpretFunctionEval(CompiledFunction* cf, Box* boxedLocals) {
     ++cf->times_called;
 
-    ASTInterpreter interpreter(cf);
-    for (const auto& p : locals->d) {
-        assert(p.first->cls == str_cls);
-        auto name = static_cast<BoxedString*>(p.first)->s;
-        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
-        interpreter.addSymbol(interned, p.second, false);
-    }
-
     interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
+    interpreter.setBoxedLocals(boxedLocals);
     Value v = ASTInterpreter::execute(interpreter);
 
     return v.o ? v.o : None;
 }
 
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      BoxedDict* locals) {
+                      BoxedDict* stackLocals) {
     assert(cf);
     assert(enclosing_stmt);
-    assert(locals);
+    assert(stackLocals);
     assert(after_expr);
     assert(expr_val);
 
     ASTInterpreter interpreter(cf);
 
-    for (const auto& p : locals->d) {
+    for (const auto& p : stackLocals->d) {
         assert(p.first->cls == str_cls);
         std::string name = static_cast<BoxedString*>(p.first)->s;
         if (name == PASSED_GENERATOR_NAME) {
@@ -1184,6 +1192,8 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
             interpreter.setPassedClosure(p.second);
         } else if (name == CREATED_CLOSURE_NAME) {
             interpreter.setCreatedClosure(p.second);
+        } else if (name == LOCALS_DICT_NAME) {
+            interpreter.setLocals(p.second);
         } else {
             InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
             interpreter.addSymbol(interned, p.second, false);
@@ -1279,6 +1289,12 @@ BoxedClosure* passedClosureForInterpretedFrame(void* frame_ptr) {
     ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
     assert(interpreter);
     return interpreter->getPassedClosure();
+}
+
+Box* boxedLocalsForInterpretedFrame() {
+    ASTInterpreter* interpreter = s_interpreterMap[frame_ptr];
+    assert(interpreter);
+    return interpreter->getBoxedLocals();
 }
 
 void gatherInterpreterRoots(GCVisitor* visitor) {

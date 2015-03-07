@@ -275,6 +275,7 @@ static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
 const std::string CREATED_CLOSURE_NAME = "!created_closure";
 const std::string PASSED_CLOSURE_NAME = "!passed_closure";
 const std::string PASSED_GENERATOR_NAME = "!passed_generator";
+const std::string BOXED_LOCALS_NAME = "!locals";
 
 bool isIsDefinedName(const std::string& name) {
     return startswith(name, "!is_defined_");

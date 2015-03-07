@@ -46,6 +46,7 @@ typedef std::unordered_map<InternedString, ConcreteCompilerVariable*> ConcreteSy
 extern const std::string CREATED_CLOSURE_NAME;
 extern const std::string PASSED_CLOSURE_NAME;
 extern const std::string PASSED_GENERATOR_NAME;
+extern const std::string BOXED_LOCALS_NAME;
 
 
 // Class that holds state of the current IR generation, that might not be local
