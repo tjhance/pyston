@@ -21,14 +21,20 @@
 
 namespace pyston {
 
+class Box;
+class BoxedDict;
 class BoxedModule;
+class BoxedTraceback;
+
 BoxedModule* getCurrentModule();
 
-class BoxedTraceback;
 BoxedTraceback* getTraceback();
 
-class BoxedDict;
-BoxedDict* getLocals(bool only_user_visible, bool includeClosure);
+// Returns all the stack locals, including hidden ones.
+BoxedDict* getStackLocalsIncludingUserHidden();
+
+// Adds stack locals and closure locals into the locals dict, and returns it.
+Box* fastLocalsToBoxedLocals();
 
 // Fetches a writeable pointer to the frame-local excinfo object,
 // calculating it if necessary (from previous frames).

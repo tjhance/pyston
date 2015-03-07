@@ -669,10 +669,10 @@ Box* eval(Box* code) {
     // TODO implement full functionality (args and stuff)
     RELEASE_ASSERT(code->cls == str_cls, "eval not implemented for non-strings");
 
-    BoxedDict* locals = getLocals(true /* only_user_visible */, true /* includeClosure */);
+    Box* boxedLocals = fastLocalsToBoxedLocals();
     BoxedModule* module = getCurrentModule();
 
-    return runEval(static_cast<BoxedString*>(code)->s.c_str(), locals, module);
+    return runEval(static_cast<BoxedString*>(code)->s.c_str(), boxedLocals, module);
 }
 
 static Box* callable(Box* obj) {
@@ -841,7 +841,7 @@ Box* globals() {
 }
 
 Box* locals() {
-    return getLocals(true /* filter */, true /* includeClosure */);
+    return fastLocalsToBoxedLocals();
 }
 
 Box* divmod(Box* lhs, Box* rhs) {

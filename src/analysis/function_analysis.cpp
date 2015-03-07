@@ -378,7 +378,8 @@ DefinednessAnalysis::DefinednessAnalysis(const ParamNames& arg_names, CFG* cfg, 
     for (const auto& p : results) {
         RequiredSet required;
         for (const auto& p2 : p.second) {
-            if (scope_info->refersToGlobal(p2.first))
+            if (scope_info->refersToGlobal(p2.first)
+                || scope_info->getScopeTypeOfName(p2.first) == ScopeInfo::VarScopeType::NAME)
                 continue;
 
             // printf("%d %s %d\n", p.first->idx, p2.first.c_str(), p2.second);

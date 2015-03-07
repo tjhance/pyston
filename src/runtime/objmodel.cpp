@@ -155,7 +155,7 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
     static StatCounter num_deopt("num_deopt");
     num_deopt.log();
 
-    auto locals = getLocals(false /* filter */, false /* includeClosure */);
+    auto locals = getStackLocalsIncludingUserHidden();
     auto execution_point = getExecutionPoint();
 
     // Should we only do this selectively?
@@ -4202,5 +4202,37 @@ Box* coerceUnicodeToStr(Box* unicode) {
     }
 
     return r;
+}
+
+extern "C" void boxedLocalsSet(Box* boxedLocals, const char* attr, Box* val) {
+    setitem(boxedLocals, boxString(attr), val);
+}
+
+extern "C" Box* boxedLocalsGet(Box* boxedLocals, const char* attr, BoxedModule* parent_module) {
+    assert(parent_module->cls == module_cls);
+
+    assert(boxedLocals != NULL);
+    RELEASE_ASSERT(boxedLocals->cls == dict_cls, "we don't support non-dict here yet");
+    auto& d = static_cast<BoxedDict*>(boxedLocals)->d;
+    auto it = d.find(boxString(attr));
+    if (it != d.end()) {
+        Box* value = it->second;
+        return value;
+    }
+
+    // TODO exception name?
+    std::string attr_string(attr);
+    return getGlobal(parent_module, &attr_string);
+}
+
+extern "C" void boxedLocalsDel(Box* boxedLocals, const char* attr) {
+    assert(boxedLocals != NULL);
+    RELEASE_ASSERT(boxedLocals->cls == dict_cls, "we don't support non-dict here yet");
+    auto& d = static_cast<BoxedDict*>(boxedLocals)->d;
+    auto it = d.find(boxString(attr));
+    if (it == d.end()) {
+        assertNameDefined(0, attr, NameError, false /* local_var_msg */);
+    }
+    d.erase(it);
 }
 }

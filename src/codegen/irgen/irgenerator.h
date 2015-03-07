@@ -61,6 +61,7 @@ private:
 
     llvm::AllocaInst* scratch_space;
     llvm::Value* frame_info;
+    llvm::Value* boxed_locals;
     int scratch_size;
 
 public:
@@ -82,6 +83,7 @@ public:
 
     llvm::Value* getScratchSpace(int min_bytes);
     llvm::Value* getFrameInfoVar();
+    llvm::Value* getBoxedLocalsVar();
 
     ConcreteCompilerType* getReturnType() { return cf->getReturnType(); }
 

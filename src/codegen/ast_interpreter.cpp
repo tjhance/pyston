@@ -147,10 +147,10 @@ public:
     void setGenerator(Box* gen);
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
+    void setBoxedLocals(Box*);
 
     void gcVisit(GCVisitor* visitor);
 };
-
 
 void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_duplicates) {
     if (!allow_duplicates)
@@ -173,6 +173,10 @@ void ASTInterpreter::setCreatedClosure(Box* closure) {
     this->created_closure = static_cast<BoxedClosure*>(closure);
 }
 
+void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
+    this->frame_info.boxedLocals = boxedLocals;
+}
+
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
     for (const auto& p2 : getSymbolTable()) {
         visitor->visitPotential(p2.second);
@@ -184,6 +188,8 @@ void ASTInterpreter::gcVisit(GCVisitor* visitor) {
         visitor->visit(created_closure);
     if (generator)
         visitor->visit(generator);
+    if (frame_info.boxedLocals)
+        visitor->visit(frame_info.boxedLocals);
 }
 
 ASTInterpreter::ASTInterpreter(CompiledFunction* compiled_function)
@@ -322,8 +328,13 @@ Value ASTInterpreter::doBinOp(Box* left, Box* right, int op, BinExpType exp_type
 }
 
 void ASTInterpreter::doStore(InternedString name, Value value) {
-    if (scope_info->refersToGlobal(name)) {
+    ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
+    if (vst == ScopeInfo::VarScopeType::GLOBAL) {
         setattr(source_info->parent_module, name.c_str(), value.o);
+    } else if (vst == ScopeInfo::VarScopeType::NAME) {
+        assert(frame_info.boxedLocals != NULL);
+        // TODO should probably pre-box the names when it's a scope that usesNameLookup
+        setitem(frame_info.boxedLocals, boxString(name.str()), value.o);
     } else {
         sym_table[name] = value.o;
         if (scope_info->saveInClosure(name))
@@ -560,16 +571,8 @@ Value ASTInterpreter::visit_langPrimitive(AST_LangPrimitive* node) {
         v = boxBool(isinstance(obj.o, cls.o, unboxInt(flags.o)));
 
     } else if (node->opcode == AST_LangPrimitive::LOCALS) {
-        assert(node->args.size() == 0);
-        BoxedDict* dict = new BoxedDict;
-        for (auto& p : sym_table) {
-            auto s = p.first;
-            if (s.str()[0] == '!' || s.str()[0] == '#')
-                continue;
-
-            dict->d[new BoxedString(s.str())] = p.second;
-        }
-        v = dict;
+        assert(frame_info.boxedLocals != NULL);
+        v = frame_info.boxedLocals;
     } else if (node->opcode == AST_LangPrimitive::NONZERO) {
         assert(node->args.size() == 1);
         Value obj = visit_expr(node->args[0]);
@@ -790,25 +793,33 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
             }
             case AST_TYPE::Name: {
                 AST_Name* target = (AST_Name*)target_;
-                if (scope_info->refersToGlobal(target->id)) {
+
+                ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
+                if (vst == ScopeInfo::VarScopeType::GLOBAL) {
                     // Can't use delattr since the errors are different:
                     delGlobal(source_info->parent_module, &target->id.str());
                     continue;
+                } else if (vst == ScopeInfo::VarScopeType::NAME) {
+                    assert(frame_info.boxedLocals != NULL);
+                    assert(frame_info.boxedLocals->cls == dict_cls);
+                    auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
+                    auto it = d.find(boxString(target->id.str()));
+                    if (it == d.end()) {
+                        assertNameDefined(0, target->id.c_str(), NameError, false /* local_var_msg */);
+                    }
+                    d.erase(it);
+                } else {
+                    assert(!scope_info->refersToClosure(target->id));
+                    assert(!scope_info->saveInClosure(
+                        target->id)); // SyntaxError: can not delete variable 'x' referenced in nested scope
+
+                    if (sym_table.count(target->id) == 0) {
+                        assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);
+                        return Value();
+                    }
+
+                    sym_table.erase(target->id);
                 }
-
-                assert(!scope_info->refersToClosure(target->id));
-                assert(!scope_info->saveInClosure(
-                    target->id)); // SyntaxError: can not delete variable 'x' referenced in nested scope
-
-                // A del of a missing name generates different error messages in a function scope vs a classdef scope
-                bool local_error_msg = (source_info->ast->type != AST_TYPE::ClassDef);
-
-                if (sym_table.count(target->id) == 0) {
-                    assertNameDefined(0, target->id.c_str(), NameError, local_error_msg);
-                    return Value();
-                }
-
-                sym_table.erase(target->id);
                 break;
             }
             default:
@@ -1043,33 +1054,21 @@ Value ASTInterpreter::visit_str(AST_Str* node) {
 }
 
 Value ASTInterpreter::visit_name(AST_Name* node) {
-    switch (node->lookup_type) {
-        case AST_Name::UNKNOWN: {
-            ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
-            if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-                node->lookup_type = AST_Name::GLOBAL;
-                return getGlobal(source_info->parent_module, &node->id.str());
-            } else if (vst == ScopeInfo::VarScopeType::DEREF) {
-                node->lookup_type = AST_Name::CLOSURE;
-                return getattr(passed_closure, node->id.c_str());
-            } else {
-                bool is_old_local = (vst == ScopeInfo::VarScopeType::NAME);
-                node->lookup_type = is_old_local ? AST_Name::LOCAL : AST_Name::FAST_LOCAL;
-
-                SymMap::iterator it = sym_table.find(node->id);
-                if (it != sym_table.end()) {
-                    Box* value = it->second;
-                    return value;
-                }
-
-                // classdefs (and some other cases like eval) have different scoping rules than functions:
-                if (is_old_local)
-                    return getGlobal(source_info->parent_module, &node->id.str());
-
-                assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
-                return Value();
-            }
+    if (node->lookup_type == AST_Name::UNKNOWN) {
+        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(node->id);
+        if (vst == ScopeInfo::VarScopeType::GLOBAL) {
+            node->lookup_type = AST_Name::GLOBAL;
+        } else if (vst == ScopeInfo::VarScopeType::DEREF) {
+            node->lookup_type = AST_Name::CLOSURE;
+            return getattr(passed_closure, node->id.c_str());
+        } else if (vst == ScopeInfo::VarScopeType::NAME) {
+            node->lookup_type = AST_Name::LOCAL;
+        } else {
+            node->lookup_type = AST_Name::FAST_LOCAL;
         }
+    }
+
+    switch (node->lookup_type) {
         case AST_Name::GLOBAL:
             return getGlobal(source_info->parent_module, &node->id.str());
         case AST_Name::CLOSURE:
@@ -1083,8 +1082,10 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             return Value();
         }
         case AST_Name::LOCAL: {
-            SymMap::iterator it = sym_table.find(node->id);
-            if (it != sym_table.end()) {
+            assert(frame_info.boxedLocals->cls == dict_cls);
+            auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
+            auto it = d.find(boxString(node->id.str()));
+            if (it != d.end()) {
                 Box* value = it->second;
                 return value;
             }
@@ -1141,6 +1142,9 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
 
     ++cf->times_called;
     ASTInterpreter interpreter(cf);
+    if (unlikely(cf->clfunc->source->getScopeInfo()->usesNameLookup())) {
+        interpreter.setBoxedLocals(new BoxedDict());
+    }
 
     interpreter.initArguments(nargs, (BoxedClosure*)closure, (BoxedGenerator*)generator, arg1, arg2, arg3, args);
     Value v = ASTInterpreter::execute(interpreter);
@@ -1148,34 +1152,29 @@ Box* astInterpretFunction(CompiledFunction* cf, int nargs, Box* closure, Box* ge
     return v.o ? v.o : None;
 }
 
-Box* astInterpretFunctionEval(CompiledFunction* cf, BoxedDict* locals) {
+Box* astInterpretFunctionEval(CompiledFunction* cf, Box* boxedLocals) {
     ++cf->times_called;
 
     ASTInterpreter interpreter(cf);
-    for (const auto& p : locals->d) {
-        assert(p.first->cls == str_cls);
-        auto name = static_cast<BoxedString*>(p.first)->s;
-        InternedString interned = cf->clfunc->source->getInternedStrings().get(name);
-        interpreter.addSymbol(interned, p.second, false);
-    }
-
     interpreter.initArguments(0, NULL, NULL, NULL, NULL, NULL, NULL);
+    RELEASE_ASSERT(boxedLocals->cls == dict_cls, "we don't support non-dicts here yet");
+    interpreter.setBoxedLocals(boxedLocals);
     Value v = ASTInterpreter::execute(interpreter);
 
     return v.o ? v.o : None;
 }
 
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      BoxedDict* locals) {
+                      BoxedDict* stackLocals) {
     assert(cf);
     assert(enclosing_stmt);
-    assert(locals);
+    assert(stackLocals);
     assert(after_expr);
     assert(expr_val);
 
     ASTInterpreter interpreter(cf);
 
-    for (const auto& p : locals->d) {
+    for (const auto& p : stackLocals->d) {
         assert(p.first->cls == str_cls);
         std::string name = static_cast<BoxedString*>(p.first)->s;
         if (name == PASSED_GENERATOR_NAME) {

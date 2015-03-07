@@ -305,7 +305,7 @@ void compileAndRunModule(AST_Module* m, BoxedModule* bm) {
         ((void (*)())cf->code)();
 }
 
-static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm, BoxedDict* locals) {
+static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm, Box* boxedLocals) {
     CompiledFunction* cf;
 
     { // scope for limiting the locked region:
@@ -326,10 +326,10 @@ static Box* compileAndRunExpression(AST_Expression* expr, BoxedModule* bm, Boxed
         assert(cf->clfunc->versions.size());
     }
 
-    return astInterpretFunctionEval(cf, locals);
+    return astInterpretFunctionEval(cf, boxedLocals);
 }
 
-Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module) {
+Box* runEval(const char* code, Box* boxedLocals, BoxedModule* module) {
     // TODO error message if parse fails or if it isn't an expr
     // TODO should have a cleaner interface that can parse the Expression directly
     // TODO this memory leaks
@@ -338,10 +338,10 @@ Box* runEval(const char* code, BoxedDict* locals, BoxedModule* module) {
     AST_Expression* parsedExpr = new AST_Expression(std::move(parsedModule->interned_strings));
     parsedExpr->body = static_cast<AST_Expr*>(parsedModule->body[0])->value;
 
-    return compileAndRunExpression(parsedExpr, module, locals);
+    return compileAndRunExpression(parsedExpr, module, boxedLocals);
 }
 
-static Box* compileAndRunExec(AST_Suite* suite, BoxedModule* bm, BoxedDict* locals) {
+static Box* compileAndRunExec(AST_Suite* suite, BoxedModule* bm, Box* boxedLocals) {
     CompiledFunction* cf;
 
     { // scope for limiting the locked region:
@@ -360,14 +360,14 @@ static Box* compileAndRunExec(AST_Suite* suite, BoxedModule* bm, BoxedDict* loca
         assert(cf->clfunc->versions.size());
     }
 
-    return astInterpretFunctionEval(cf, locals);
+    return astInterpretFunctionEval(cf, boxedLocals);
 }
 
 Box* runExec(Box* boxedCode) {
     // TODO implement full functionality (globals and locals)
     RELEASE_ASSERT(boxedCode->cls == str_cls, "eval not implemented for non-strings");
 
-    BoxedDict* locals = getLocals(true /* only_user_visible */, true /* includeClosure */);
+    Box* boxedLocals = fastLocalsToBoxedLocals();
     BoxedModule* module = getCurrentModule();
     const char* code = static_cast<BoxedString*>(boxedCode)->s.c_str();
 
@@ -376,7 +376,7 @@ Box* runExec(Box* boxedCode) {
     AST_Suite* parsedSuite = new AST_Suite(std::move(parsedModule->interned_strings));
     parsedSuite->body = parsedModule->body;
 
-    return compileAndRunExec(parsedSuite, module, locals);
+    return compileAndRunExec(parsedSuite, module, boxedLocals);
 }
 
 // If a function version keeps failing its speculations, kill it (remove it

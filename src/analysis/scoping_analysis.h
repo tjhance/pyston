@@ -69,6 +69,8 @@ public:
     virtual bool saveInClosure(InternedString name) = 0;
     virtual VarScopeType getScopeTypeOfName(InternedString name) = 0;
 
+    virtual bool usesNameLookup() = 0;
+
     virtual InternedString mangleName(InternedString id) = 0;
     virtual InternedString internString(llvm::StringRef) = 0;
 };

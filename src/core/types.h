@@ -556,12 +556,9 @@ struct FrameInfo {
     // - This makes frame entering+leaving faster at the expense of slower exceptions.
     ExcInfo exc;
 
-    // Not ALL the locals!
-    // In general, the locals for a frame are a union of (i) on the stack (ii) in the closure
-    // if it exists, and (iii) in this dict if it exists.
-    Box* locals_dict;
+    Box* boxedLocals;
 
-    FrameInfo(ExcInfo exc) : exc(exc), locals_dict(NULL) {}
+    FrameInfo(ExcInfo exc) : exc(exc), boxedLocals(NULL) {}
 };
 
 struct CallattrFlags {

@@ -129,6 +129,10 @@ void force() {
 
     FORCE(gc::sizes);
 
+    FORCE(boxedLocalsSet);
+    FORCE(boxedLocalsGet);
+    FORCE(boxedLocalsDel);
+
     // FORCE(listIter);
 }
 }

@@ -109,6 +109,8 @@ public:
         return refersToGlobal(name) ? VarScopeType::GLOBAL : VarScopeType::FAST;
     }
 
+    bool usesNameLookup() override { return false; }
+
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
 };
@@ -188,11 +190,11 @@ private:
     ScopeInfo* parent;
     ScopingAnalysis::ScopeNameUsage* usage;
     AST* ast;
-    bool usesNameLookup;
+    bool usesNameLookup_;
 
 public:
     ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup)
-        : parent(parent), usage(usage), ast(ast), usesNameLookup(usesNameLookup) {
+        : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup) {
         // not true anymore: Expression
         // assert(parent);
         assert(usage);
@@ -218,7 +220,7 @@ public:
 
         if (usage->forced_globals.count(name))
             return true;
-        if (usesNameLookup)
+        if (usesNameLookup_)
             return false;
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
@@ -230,7 +232,7 @@ public:
     }
     bool saveInClosure(InternedString name) override {
         // HAX
-        if (isCompilerCreatedName(name) || usesNameLookup)
+        if (isCompilerCreatedName(name) || usesNameLookup_)
             return false;
         return usage->referenced_from_nested.count(name) != 0;
     }
@@ -245,10 +247,12 @@ public:
             return VarScopeType::GLOBAL;
         if (saveInClosure(name))
             return VarScopeType::CLOSURE;
-        if (usesNameLookup)
+        if (usesNameLookup_)
             return VarScopeType::NAME;
         return VarScopeType::FAST;
     }
+
+    bool usesNameLookup() override { return usesNameLookup_; }
 
     InternedString mangleName(const InternedString id) override {
         return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());

@@ -36,6 +36,7 @@
 #include "codegen/stackmaps.h"
 #include "core/util.h"
 #include "runtime/ctxswitching.h"
+#include "runtime/objmodel.h"
 #include "runtime/generator.h"
 #include "runtime/traceback.h"
 #include "runtime/types.h"
@@ -486,8 +487,8 @@ BoxedTraceback* getTraceback() {
     }
 
     std::vector<const LineInfo*> entries;
-    for (auto& frame_info : unwindPythonFrames()) {
-        const LineInfo* line_info = lineInfoForFrame(frame_info);
+    for (auto& frame_iter : unwindPythonFrames()) {
+        const LineInfo* line_info = lineInfoForFrame(frame_iter);
         if (line_info)
             entries.push_back(line_info);
     }
@@ -542,16 +543,20 @@ BoxedModule* getCurrentModule() {
     return compiledFunction->clfunc->source->parent_module;
 }
 
-BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
-    for (PythonFrameIterator& frame_info : unwindPythonFrames()) {
+// TODO factor getStackLoclasIncludingUserHidden and fastLocalsToBoxedLocals
+// because they are pretty ugly but have a pretty repetitive pattern.
+
+// TODO no reason for this to be a BoxedDict over an ordinary dict, I think
+BoxedDict* getStackLocalsIncludingUserHidden() {
+    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
         BoxedDict* d;
         BoxedClosure* closure;
         CompiledFunction* cf;
-        if (frame_info.getId().type == PythonFrameId::COMPILED) {
+        if (frame_iter.getId().type == PythonFrameId::COMPILED) {
             d = new BoxedDict();
 
-            cf = frame_info.getCF();
-            uint64_t ip = frame_info.getId().ip;
+            cf = frame_iter.getCF();
+            uint64_t ip = frame_iter.getId().ip;
 
             assert(ip > cf->code_start);
             unsigned offset = ip - cf->code_start;
@@ -572,7 +577,7 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
                         const auto& locs = e.locations;
 
                         assert(locs.size() == 1);
-                        uint64_t v = frame_info.readLocation(locs[0]);
+                        uint64_t v = frame_iter.readLocation(locs[0]);
                         if ((v & 1) == 0)
                             is_undefined.insert(p.first.substr(12));
 
@@ -582,12 +587,9 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
             }
 
             for (const auto& p : cf->location_map->names) {
-                if (p.first[0] == '!' && (only_user_visible
-                                          || !(p.first == PASSED_GENERATOR_NAME || p.first == PASSED_CLOSURE_NAME
-                                               || p.first == CREATED_CLOSURE_NAME)))
-                    continue;
-
-                if (only_user_visible && p.first[0] == '#')
+                if (p.first[0] == '!'
+                    && !(p.first == PASSED_GENERATOR_NAME || p.first == PASSED_CLOSURE_NAME
+                         || p.first == CREATED_CLOSURE_NAME))
                     continue;
 
                 if (is_undefined.count(p.first))
@@ -601,7 +603,84 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
                         // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
 
                         for (auto& loc : locs) {
-                            vals.push_back(frame_info.readLocation(loc));
+                            vals.push_back(frame_iter.readLocation(loc));
+                        }
+
+                        Box* v = e.type->deserializeFromFrame(vals);
+                        // printf("%s: (pp id %ld) %p\n", p.first.c_str(), e._debug_pp_id, v);
+                        assert(gc::isValidGCObject(v));
+                        d->d[boxString(p.first)] = v;
+                    }
+                }
+            }
+        } else {
+            abort();
+        }
+
+        return d;
+    }
+    RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
+}
+
+Box* fastLocalsToBoxedLocals() {
+    for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
+        BoxedDict* d;
+        BoxedClosure* closure;
+        CompiledFunction* cf;
+        FrameInfo* frame_info;
+        if (frame_iter.getId().type == PythonFrameId::COMPILED) {
+            d = new BoxedDict();
+
+            cf = frame_iter.getCF();
+            uint64_t ip = frame_iter.getId().ip;
+
+            assert(ip > cf->code_start);
+            unsigned offset = ip - cf->code_start;
+
+            assert(cf->location_map);
+
+            // We have to detect + ignore any entries for variables that
+            // could have been defined (so they have entries) but aren't (so the
+            // entries point to uninitialized memory).
+            std::unordered_set<std::string> is_undefined;
+
+            for (const auto& p : cf->location_map->names) {
+                if (!startswith(p.first, "!is_defined_"))
+                    continue;
+
+                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
+                    if (e.offset < offset && offset <= e.offset + e.length) {
+                        const auto& locs = e.locations;
+
+                        assert(locs.size() == 1);
+                        uint64_t v = frame_iter.readLocation(locs[0]);
+                        if ((v & 1) == 0)
+                            is_undefined.insert(p.first.substr(12));
+
+                        break;
+                    }
+                }
+            }
+
+            for (const auto& p : cf->location_map->names) {
+                if (p.first[0] == '!')
+                    continue;
+
+                if (p.first[0] == '#')
+                    continue;
+
+                if (is_undefined.count(p.first))
+                    continue;
+
+                for (const LocationMap::LocationTable::LocationEntry& e : p.second.locations) {
+                    if (e.offset < offset && offset <= e.offset + e.length) {
+                        const auto& locs = e.locations;
+
+                        llvm::SmallVector<uint64_t, 1> vals;
+                        // printf("%s: %s\n", p.first.c_str(), e.type->debugName().c_str());
+
+                        for (auto& loc : locs) {
+                            vals.push_back(frame_iter.readLocation(loc));
                         }
 
                         Box* v = e.type->deserializeFromFrame(vals);
@@ -613,7 +692,7 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
             }
 
             closure = NULL;
-            if (includeClosure && cf->location_map->names.count(PASSED_CLOSURE_NAME) > 0) {
+            if (cf->location_map->names.count(PASSED_CLOSURE_NAME) > 0) {
                 for (const LocationMap::LocationTable::LocationEntry& e :
                      cf->location_map->names[PASSED_CLOSURE_NAME].locations) {
                     if (e.offset < offset && offset <= e.offset + e.length) {
@@ -622,7 +701,7 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
                         llvm::SmallVector<uint64_t, 1> vals;
 
                         for (auto& loc : locs) {
-                            vals.push_back(frame_info.readLocation(loc));
+                            vals.push_back(frame_iter.readLocation(loc));
                         }
 
                         Box* v = e.type->deserializeFromFrame(vals);
@@ -631,36 +710,52 @@ BoxedDict* getLocals(bool only_user_visible, bool includeClosure) {
                     }
                 }
             }
-        } else if (frame_info.getId().type == PythonFrameId::INTERPRETED) {
-            d = localsForInterpretedFrame((void*)frame_info.getId().bp, only_user_visible);
-            if (includeClosure) {
-                closure = passedClosureForInterpretedFrame((void*)frame_info.getId().bp);
-                cf = getCFForInterpretedFrame((void*)frame_info.getId().bp);
-            }
+
+            frame_info = frame_iter.getFrameInfo();
+        } else if (frame_iter.getId().type == PythonFrameId::INTERPRETED) {
+            d = localsForInterpretedFrame((void*)frame_iter.getId().bp, true);
+            closure = passedClosureForInterpretedFrame((void*)frame_iter.getId().bp);
+            cf = getCFForInterpretedFrame((void*)frame_iter.getId().bp);
+            frame_info = getFrameInfoForInterpretedFrame((void*)frame_iter.getId().bp);
         } else {
             abort();
         }
 
-        if (includeClosure) {
-            // Add the locals from the closure
-            for (; closure != NULL; closure = closure->parent) {
-                assert(closure->cls == closure_cls);
-                for (auto& attr_offset : closure->attrs.hcls->attr_offsets) {
-                    const std::string& name = attr_offset.first;
-                    int offset = attr_offset.second;
-                    Box* val = closure->attrs.attr_list->attrs[offset];
-                    ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-                    if (val != NULL && scope_info->refersToClosure(scope_info->internString(name))) {
-                        Box* boxedName = boxString(name);
-                        if (d->d.count(boxedName) == 0) {
-                            d->d[boxString(name)] = val;
-                        }
+        assert(frame_info);
+        if (frame_info->boxedLocals == NULL) {
+            frame_info->boxedLocals = new BoxedDict();
+        }
+        assert(gc::isValidGCObject(frame_info->boxedLocals));
+
+        // Add the locals from the closure
+        // TODO in a ClassDef scope, we aren't supposed to add these
+        for (; closure != NULL; closure = closure->parent) {
+            assert(closure->cls == closure_cls);
+            for (auto& attr_offset : closure->attrs.hcls->attr_offsets) {
+                const std::string& name = attr_offset.first;
+                int offset = attr_offset.second;
+                Box* val = closure->attrs.attr_list->attrs[offset];
+                ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
+                if (val != NULL && scope_info->refersToClosure(scope_info->internString(name))) {
+                    Box* boxedName = boxString(name);
+                    if (d->d.count(boxedName) == 0) {
+                        d->d[boxString(name)] = val;
                     }
                 }
             }
         }
 
-        return d;
+        // Loop through all the values found above.
+        // TODO Right now d just has all the python variables that are *initialized*
+        // But we also need to loop through all the uninitialized variables that we have
+        // access to and delete them from the locals dict
+        for (const auto& p : d->d) {
+            Box* varname = p.first;
+            Box* value = p.second;
+            setitem(frame_info->boxedLocals, varname, value);
+        }
+
+        return frame_info->boxedLocals;
     }
     RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }

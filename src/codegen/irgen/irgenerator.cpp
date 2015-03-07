@@ -85,15 +85,37 @@ llvm::Value* IRGenState::getFrameInfoVar() {
         llvm::AllocaInst* al = builder.CreateAlloca(g.frame_info_type, NULL, "frame_info");
         assert(al->isStaticAlloca());
 
+        // frame_info.exc.type = NULL
         static_assert(offsetof(FrameInfo, exc) == 0, "");
         static_assert(offsetof(ExcInfo, type) == 0, "");
         llvm::Value* exctype_gep
             = builder.CreateConstInBoundsGEP2_32(builder.CreateConstInBoundsGEP2_32(al, 0, 0), 0, 0);
         builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), exctype_gep);
 
+        // frame_info.boxedLocals = NULL
+        // OR
+        // frame_info.boxedLocals = createDict()
+        llvm::Value* boxed_locals_value;
+        if (getScopeInfo()->usesNameLookup()) {
+            boxed_locals_value = this->boxed_locals = builder.CreateCall(g.funcs.createDict);
+        } else {
+            boxed_locals_value = embedConstantPtr(NULL, g.llvm_value_type_ptr);
+        }
+        static_assert(offsetof(FrameInfo, exc) == 0, "");
+        static_assert(sizeof(ExcInfo) == 24, "");
+        static_assert(offsetof(FrameInfo, boxedLocals) == 24, "");
+        llvm::Value* boxed_locals_gep = builder.CreateConstInBoundsGEP2_32(al, 0, 1);
+        builder.CreateStore(boxed_locals_value, boxed_locals_gep);
+
         frame_info = al;
     }
     return frame_info;
+}
+
+llvm::Value* IRGenState::getBoxedLocalsVar() {
+    assert(getScopeInfo()->usesNameLookup());
+    getFrameInfoVar(); // ensures this->boxed_locals_var is initialized
+    return this->boxed_locals;
 }
 
 ScopeInfo* IRGenState::getScopeInfo() {
@@ -447,53 +469,7 @@ private:
                 }
             }
             case AST_LangPrimitive::LOCALS: {
-                assert(node->args.size() == 0);
-
-                llvm::Value* v = emitter.getBuilder()->CreateCall(g.funcs.createDict);
-                ConcreteCompilerVariable* rtn = new ConcreteCompilerVariable(DICT, v, true);
-
-                for (auto& p : symbol_table) {
-                    if (p.first.str()[0] == '!' || p.first.str()[0] == '#')
-                        continue;
-
-                    ConcreteCompilerVariable* is_defined_var
-                        = static_cast<ConcreteCompilerVariable*>(_getFake(getIsDefinedName(p.first), true));
-
-                    static const std::string setitem_str("__setitem__");
-                    if (!is_defined_var) {
-                        ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
-
-                        // TODO super dumb that it reallocates the name again
-                        CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false };
-                        CompilerVariable* _r
-                            = rtn->callattr(emitter, getEmptyOpInfo(unw_info), &setitem_str, flags, ArgPassSpec(2),
-                                            { makeStr(new std::string(p.first.str())), converted }, NULL);
-                        converted->decvref(emitter);
-                        _r->decvref(emitter);
-                    } else {
-                        assert(is_defined_var->getType() == BOOL);
-
-                        llvm::BasicBlock* was_defined
-                            = llvm::BasicBlock::Create(g.context, "was_defined", irstate->getLLVMFunction());
-                        llvm::BasicBlock* join
-                            = llvm::BasicBlock::Create(g.context, "join", irstate->getLLVMFunction());
-                        emitter.getBuilder()->CreateCondBr(i1FromBool(emitter, is_defined_var), was_defined, join);
-
-                        emitter.getBuilder()->SetInsertPoint(was_defined);
-                        ConcreteCompilerVariable* converted = p.second->makeConverted(emitter, p.second->getBoxType());
-                        // TODO super dumb that it reallocates the name again
-                        CallattrFlags flags = {.cls_only = true, .null_on_nonexistent = false };
-                        CompilerVariable* _r
-                            = rtn->callattr(emitter, getEmptyOpInfo(unw_info), &setitem_str, flags, ArgPassSpec(2),
-                                            { makeStr(new std::string(p.first.str())), converted }, NULL);
-                        converted->decvref(emitter);
-                        _r->decvref(emitter);
-                        emitter.getBuilder()->CreateBr(join);
-                        emitter.getBuilder()->SetInsertPoint(join);
-                    }
-                }
-
-                return rtn;
+                return new ConcreteCompilerVariable(UNKNOWN, irstate->getBoxedLocalsVar(), true);
             }
             case AST_LangPrimitive::GET_ITER: {
                 assert(node->args.size() == 1);
@@ -882,13 +858,14 @@ private:
             assert(closure);
 
             return closure->getattr(emitter, getEmptyOpInfo(unw_info), &node->id.str(), false);
+        } else if (vst == ScopeInfo::VarScopeType::NAME) {
+            llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
+            llvm::Value* attr = getStringConstantPtr(node->id.str() + '\0');
+            llvm::Value* module = embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr);
+            llvm::Value* r = emitter.createCall3(unw_info, g.funcs.boxedLocalsGet, boxedLocals, attr, module);
+            return new ConcreteCompilerVariable(UNKNOWN, r, true);
         } else {
             if (symbol_table.find(node->id) == symbol_table.end()) {
-                // classdefs have different scoping rules than functions:
-                if (vst == ScopeInfo::VarScopeType::NAME) {
-                    return _getGlobal(node, unw_info);
-                }
-
                 // TODO should mark as DEAD here, though we won't end up setting all the names appropriately
                 // state = DEAD;
                 llvm::CallSite call = emitter.createCall(
@@ -904,18 +881,6 @@ private:
                 = static_cast<ConcreteCompilerVariable*>(_getFake(defined_name, true));
 
             if (is_defined_var) {
-                if (vst == ScopeInfo::VarScopeType::NAME) {
-                    llvm::Value* v = handlePotentiallyUndefined(
-                        is_defined_var, g.llvm_value_type_ptr, curblock, emitter, false,
-                        [=](IREmitter& emitter) {
-                            CompilerVariable* local = symbol_table[node->id];
-                            return local->makeConverted(emitter, local->getBoxType())->getValue();
-                        },
-                        [=](IREmitter& emitter) { return _getGlobal(node, unw_info)->getValue(); });
-
-                    return new ConcreteCompilerVariable(UNKNOWN, v, true);
-                }
-
                 emitter.createCall(unw_info, g.funcs.assertNameDefined,
                                    { i1FromBool(emitter, is_defined_var), getStringConstantPtr(node->id.str() + '\0'),
                                      embedConstantPtr(UnboundLocalError, g.llvm_class_type_ptr),
@@ -1249,7 +1214,8 @@ private:
         auto scope_info = irstate->getScopeInfo();
         assert(!scope_info->refersToClosure(name));
 
-        if (scope_info->refersToGlobal(name)) {
+        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
+        if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             assert(!scope_info->saveInClosure(name));
 
             // TODO do something special here so that it knows to only emit a monomorphic inline cache?
@@ -1257,6 +1223,12 @@ private:
                 MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
             module->setattr(emitter, getEmptyOpInfo(unw_info), &name.str(), val);
             module->decvref(emitter);
+        } else if (vst == ScopeInfo::VarScopeType::NAME) {
+            // TODO inefficient
+            llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
+            llvm::Value* attr = getStringConstantPtr(name.str() + '\0');
+            emitter.createCall3(unw_info, g.funcs.boxedLocalsSet, boxedLocals, attr,
+                                val->makeConverted(emitter, UNKNOWN)->getValue());
         } else {
             CompilerVariable*& prev = symbol_table[name];
             if (prev != NULL) {
@@ -1514,18 +1486,22 @@ private:
             return;
         }
 
+        if (scope_info->getScopeTypeOfName(target->id) == ScopeInfo::VarScopeType::NAME) {
+            llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
+            llvm::Value* attr = getStringConstantPtr(target->id.str() + '\0');
+            emitter.createCall2(unw_info, g.funcs.boxedLocalsDel, boxedLocals, attr);
+            return;
+        }
+
         assert(!scope_info->refersToClosure(target->id));
         assert(!scope_info->saveInClosure(
             target->id)); // SyntaxError: can not delete variable 'x' referenced in nested scope
-
-        // A del of a missing name generates different error messages in a function scope vs a classdef scope
-        bool local_error_msg = (irstate->getSourceInfo()->ast->type != AST_TYPE::ClassDef);
 
         if (symbol_table.count(target->id) == 0) {
             llvm::CallSite call = emitter.createCall(
                 unw_info, g.funcs.assertNameDefined,
                 { getConstantInt(0, g.i1), getStringConstantPtr(target->id.str() + '\0'),
-                  embedConstantPtr(NameError, g.llvm_class_type_ptr), getConstantInt(local_error_msg, g.i1) });
+                  embedConstantPtr(NameError, g.llvm_class_type_ptr), getConstantInt(true /*local_error_msg*/, g.i1) });
             call.setDoesNotReturn();
             return;
         }
@@ -1537,7 +1513,7 @@ private:
             emitter.createCall(unw_info, g.funcs.assertNameDefined,
                                { i1FromBool(emitter, is_defined_var), getStringConstantPtr(target->id.str() + '\0'),
                                  embedConstantPtr(NameError, g.llvm_class_type_ptr),
-                                 getConstantInt(local_error_msg, g.i1) });
+                                 getConstantInt(true /*local_error_msg*/, g.i1) });
             _popFake(defined_name);
         }
 
@@ -2312,7 +2288,6 @@ public:
             _setFake(internString(PASSED_GENERATOR_NAME), new ConcreteCompilerVariable(GENERATOR, AI, true));
             ++AI;
         }
-
 
         std::vector<llvm::Value*> python_parameters;
         for (int i = 0; i < arg_types.size(); i++) {

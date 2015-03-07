@@ -9,6 +9,7 @@ cases = [
 # protip: delete this first """ to get your editor to syntax-highlight the code
 
 """
+
 # This should compile fine
 def f():
     a = 0
@@ -117,6 +118,18 @@ def f():
         print a
         exec "a = 5"
         from string import *
+
+""", """
+
+def f():
+    def g():
+        exec "a = 5"
+
+""", """
+
+class C(object):
+    def g():
+        exec "a = 5"
 
 """, #"""
 #def f():
