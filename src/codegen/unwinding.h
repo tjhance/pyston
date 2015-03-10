@@ -25,13 +25,11 @@ class Box;
 class BoxedDict;
 class BoxedModule;
 class BoxedTraceback;
+struct FrameInfo;
 
 BoxedModule* getCurrentModule();
 
 BoxedTraceback* getTraceback();
-
-// Returns all the stack locals, including hidden ones.
-BoxedDict* getStackLocalsIncludingUserHidden();
 
 // Adds stack locals and closure locals into the locals dict, and returns it.
 Box* fastLocalsToBoxedLocals();
@@ -45,6 +43,23 @@ struct ExecutionPoint {
     AST_stmt* current_stmt;
 };
 ExecutionPoint getExecutionPoint();
+
+struct FrameStackState {
+    // This includes all # variables (but not the ! ones).
+    // Therefore, it's not the same as the BoxedLocals.
+    // This also means that it contains
+    // CREATED_CLOSURE_NAME, PASSED_CLOSURE_NAME, and GENERATOR_NAME.
+    BoxedDict* locals;
+
+    // The frame_info is a pointer to the frame_info on the stack, so it is invalid
+    // after the frame ends.
+    FrameInfo* frame_info;
+
+    FrameStackState(BoxedDict* locals, FrameInfo* frame_info) : locals(locals), frame_info(frame_info) {}
+};
+
+// Returns all the stack locals, including hidden ones.
+FrameStackState getFrameStackState();
 }
 
 #endif

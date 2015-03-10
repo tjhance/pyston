@@ -1787,7 +1787,7 @@ public:
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
         assert(vals.size() == numFrameArgs());
-        abort();
+        return reinterpret_cast<Box*>(vals[0]);
     }
 } _GENERATOR;
 ConcreteCompilerType* GENERATOR = &_GENERATOR;

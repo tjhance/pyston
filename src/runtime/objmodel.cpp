@@ -155,13 +155,13 @@ extern "C" Box* deopt(AST_expr* expr, Box* value) {
     static StatCounter num_deopt("num_deopt");
     num_deopt.log();
 
-    auto locals = getStackLocalsIncludingUserHidden();
+    FrameStackState frame_state = getFrameStackState();
     auto execution_point = getExecutionPoint();
 
     // Should we only do this selectively?
     execution_point.cf->speculationFailed();
 
-    return astInterpretFrom(execution_point.cf, expr, execution_point.current_stmt, value, locals);
+    return astInterpretFrom(execution_point.cf, expr, execution_point.current_stmt, value, frame_state);
 }
 
 extern "C" bool softspace(Box* b, bool newval) {

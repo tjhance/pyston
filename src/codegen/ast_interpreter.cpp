@@ -148,6 +148,7 @@ public:
     void setPassedClosure(Box* closure);
     void setCreatedClosure(Box* closure);
     void setBoxedLocals(Box*);
+    void setFrameInfo(const FrameInfo* frame_info);
 
     void gcVisit(GCVisitor* visitor);
 };
@@ -178,6 +179,10 @@ void ASTInterpreter::setCreatedClosure(Box* closure) {
 
 void ASTInterpreter::setBoxedLocals(Box* boxedLocals) {
     this->frame_info.boxedLocals = boxedLocals;
+}
+
+void ASTInterpreter::setFrameInfo(const FrameInfo* frame_info) {
+    this->frame_info = *frame_info;
 }
 
 void ASTInterpreter::gcVisit(GCVisitor* visitor) {
@@ -1168,16 +1173,16 @@ Box* astInterpretFunctionEval(CompiledFunction* cf, Box* boxedLocals) {
 }
 
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      BoxedDict* stackLocals) {
+                      FrameStackState frame_state) {
     assert(cf);
     assert(enclosing_stmt);
-    assert(stackLocals);
+    assert(frame_state.locals);
     assert(after_expr);
     assert(expr_val);
 
     ASTInterpreter interpreter(cf);
 
-    for (const auto& p : stackLocals->d) {
+    for (const auto& p : frame_state.locals->d) {
         assert(p.first->cls == str_cls);
         std::string name = static_cast<BoxedString*>(p.first)->s;
         if (name == PASSED_GENERATOR_NAME) {
@@ -1191,6 +1196,8 @@ Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* encl
             interpreter.addSymbol(interned, p.second, false);
         }
     }
+
+    interpreter.setFrameInfo(frame_state.frame_info);
 
     CFGBlock* start_block = NULL;
     AST_stmt* starting_statement = NULL;

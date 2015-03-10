@@ -15,6 +15,8 @@
 #ifndef PYSTON_CODEGEN_ASTINTERPRETER_H
 #define PYSTON_CODEGEN_ASTINTERPRETER_H
 
+#include "codegen/unwinding.h"
+
 namespace pyston {
 
 namespace gc {
@@ -35,7 +37,7 @@ Box* astInterpretFunction(CompiledFunction* f, int nargs, Box* closure, Box* gen
                           Box** args);
 Box* astInterpretFunctionEval(CompiledFunction* cf, Box* boxedLocals);
 Box* astInterpretFrom(CompiledFunction* cf, AST_expr* after_expr, AST_stmt* enclosing_stmt, Box* expr_val,
-                      BoxedDict* stackLocals);
+                      FrameStackState frame_state);
 
 AST_stmt* getCurrentStatementForInterpretedFrame(void* frame_ptr);
 CompiledFunction* getCFForInterpretedFrame(void* frame_ptr);

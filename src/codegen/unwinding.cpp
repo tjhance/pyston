@@ -550,8 +550,7 @@ BoxedModule* getCurrentModule() {
 // TODO factor getStackLoclasIncludingUserHidden and fastLocalsToBoxedLocals
 // because they are pretty ugly but have a pretty repetitive pattern.
 
-// TODO no reason for this to be a BoxedDict over an ordinary dict, I think
-BoxedDict* getStackLocalsIncludingUserHidden() {
+FrameStackState getFrameStackState() {
     for (PythonFrameIterator& frame_iter : unwindPythonFrames()) {
         BoxedDict* d;
         BoxedClosure* closure;
@@ -619,7 +618,7 @@ BoxedDict* getStackLocalsIncludingUserHidden() {
             abort();
         }
 
-        return d;
+        return FrameStackState(d, frame_iter.getFrameInfo());
     }
     RELEASE_ASSERT(0, "Internal error: unable to find any python frames");
 }
