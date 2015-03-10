@@ -591,9 +591,7 @@ BoxedDict* getStackLocalsIncludingUserHidden() {
             }
 
             for (const auto& p : cf->location_map->names) {
-                if (p.first[0] == '!'
-                    && !(p.first == PASSED_GENERATOR_NAME || p.first == PASSED_CLOSURE_NAME
-                         || p.first == CREATED_CLOSURE_NAME))
+                if (p.first[0] == '!')
                     continue;
 
                 if (is_undefined.count(p.first))
