@@ -32,6 +32,10 @@
 
 namespace pyston {
 
+extern "C" long PyInt_GetMax() noexcept {
+    return LONG_MAX; /* To initialize sys.maxint */
+}
+
 extern "C" unsigned long PyInt_AsUnsignedLongMask(PyObject* op) noexcept {
     if (op && PyInt_Check(op))
         return PyInt_AS_LONG((PyIntObject*)op);
@@ -665,6 +669,9 @@ extern "C" Box* intLShift(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__lshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
+    if (rhs->cls == long_cls)
+        return longLshift(boxLong(lhs->n), rhs);
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -781,6 +788,9 @@ extern "C" Box* intRShift(BoxedInt* lhs, Box* rhs) {
         raiseExcHelper(TypeError, "descriptor '__rshift__' requires a 'int' object but received a '%s'",
                        getTypeName(lhs));
 
+    if (rhs->cls == long_cls)
+        return longRshift(boxLong(lhs->n), rhs);
+
     if (rhs->cls != int_cls) {
         return NotImplemented;
     }
@@ -882,7 +892,12 @@ extern "C" Box* intHex(BoxedInt* self) {
                        getTypeName(self));
 
     char buf[80];
-    int len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
+    int len = 0;
+    bool is_negative = self->n < 0;
+    if (is_negative)
+        len = snprintf(buf, sizeof(buf), "-0x%lx", std::abs(self->n));
+    else
+        len = snprintf(buf, sizeof(buf), "0x%lx", self->n);
     return new BoxedString(std::string(buf, len));
 }
 
@@ -892,7 +907,12 @@ extern "C" Box* intOct(BoxedInt* self) {
                        getTypeName(self));
 
     char buf[80];
-    int len = snprintf(buf, sizeof(buf), "%#lo", self->n);
+    int len = 0;
+    bool is_negative = self->n < 0;
+    if (is_negative)
+        len = snprintf(buf, sizeof(buf), "-%#lo", std::abs(self->n));
+    else
+        len = snprintf(buf, sizeof(buf), "%#lo", self->n);
     return new BoxedString(std::string(buf, len));
 }
 
@@ -1039,7 +1059,7 @@ void setupInt() {
     _addFuncIntUnknown("__ge__", BOXED_BOOL, (void*)intGeInt, (void*)intGe);
 
     _addFuncIntUnknown("__lshift__", UNKNOWN, (void*)intLShiftInt, (void*)intLShift);
-    _addFuncIntUnknown("__rshift__", BOXED_INT, (void*)intRShiftInt, (void*)intRShift);
+    _addFuncIntUnknown("__rshift__", UNKNOWN, (void*)intRShiftInt, (void*)intRShift);
 
     int_cls->giveAttr("__invert__", new BoxedFunction(boxRTFunction((void*)intInvert, BOXED_INT, 1)));
     int_cls->giveAttr("__pos__", new BoxedFunction(boxRTFunction((void*)intPos, BOXED_INT, 1)));

@@ -462,8 +462,8 @@ PythonFrameIterator::Manager unwindPythonFrames() {
 
 static std::unique_ptr<PythonFrameIterator> getTopPythonFrame() {
     std::unique_ptr<PythonFrameIterator> fr = PythonFrameIterator::begin();
-    RELEASE_ASSERT(fr != PythonFrameIterator::end(), "no valid python frames??");
-
+    if (fr == PythonFrameIterator::end())
+        return std::unique_ptr<PythonFrameIterator>();
     return fr;
 }
 
@@ -534,12 +534,16 @@ ExcInfo* getFrameExcInfo() {
 }
 
 CompiledFunction* getTopCompiledFunction() {
+    auto rtn = getTopPythonFrame();
+    if (!rtn)
+        return NULL;
     return getTopPythonFrame()->getCF();
 }
 
 BoxedModule* getCurrentModule() {
     CompiledFunction* compiledFunction = getTopCompiledFunction();
-    assert(compiledFunction);
+    if (!compiledFunction)
+        return NULL;
     return compiledFunction->clfunc->source->parent_module;
 }
 

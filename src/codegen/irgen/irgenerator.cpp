@@ -300,9 +300,9 @@ static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
     return rtn;
 }
 
-const std::string CREATED_CLOSURE_NAME = "!created_closure";
-const std::string PASSED_CLOSURE_NAME = "!passed_closure";
-const std::string PASSED_GENERATOR_NAME = "!passed_generator";
+const std::string CREATED_CLOSURE_NAME = "#created_closure";
+const std::string PASSED_CLOSURE_NAME = "#passed_closure";
+const std::string PASSED_GENERATOR_NAME = "#passed_generator";
 
 bool isIsDefinedName(const std::string& name) {
     return startswith(name, "!is_defined_");
@@ -860,7 +860,7 @@ private:
             assert(!is_kill);
             assert(scope_info->takesClosure());
 
-            CompilerVariable* closure = _getFake(internString(PASSED_CLOSURE_NAME), false);
+            CompilerVariable* closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
             assert(closure);
 
             return closure->getattr(emitter, getEmptyOpInfo(unw_info), &node->id.str(), false);
@@ -1042,7 +1042,8 @@ private:
     }
 
     CompilerVariable* evalYield(AST_Yield* node, UnwindInfo unw_info) {
-        CompilerVariable* generator = _getFake(internString(PASSED_GENERATOR_NAME), false);
+        CompilerVariable* generator = symbol_table[internString(PASSED_GENERATOR_NAME)];
+        assert(generator);
         ConcreteCompilerVariable* convertedGenerator = generator->makeConverted(emitter, generator->getBoxType());
 
 
@@ -1249,7 +1250,7 @@ private:
             _popFake(defined_name, true);
 
             if (scope_info->saveInClosure(name)) {
-                CompilerVariable* closure = _getFake(internString(CREATED_CLOSURE_NAME), false);
+                CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 assert(closure);
 
                 closure->setattr(emitter, getEmptyOpInfo(unw_info), &name.str(), val);
@@ -1397,7 +1398,7 @@ private:
         // TODO duplication with _createFunction:
         CompilerVariable* created_closure = NULL;
         if (scope_info->takesClosure()) {
-            created_closure = _getFake(internString(CREATED_CLOSURE_NAME), false);
+            created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
             assert(created_closure);
         }
 
@@ -1556,10 +1557,10 @@ private:
 
         if (takes_closure) {
             if (irstate->getScopeInfo()->createsClosure()) {
-                created_closure = _getFake(internString(CREATED_CLOSURE_NAME), false);
+                created_closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
             } else {
                 assert(irstate->getScopeInfo()->passesThroughClosure());
-                created_closure = _getFake(internString(PASSED_CLOSURE_NAME), false);
+                created_closure = symbol_table[internString(PASSED_CLOSURE_NAME)];
             }
             assert(created_closure);
         }
@@ -2276,7 +2277,8 @@ public:
 
         if (scope_info->takesClosure()) {
             passed_closure = AI;
-            _setFake(internString(PASSED_CLOSURE_NAME), new ConcreteCompilerVariable(getPassedClosureType(), AI, true));
+            symbol_table[internString(PASSED_CLOSURE_NAME)]
+                = new ConcreteCompilerVariable(getPassedClosureType(), AI, true);
             ++AI;
         }
 
@@ -2285,12 +2287,12 @@ public:
                 passed_closure = embedConstantPtr(nullptr, g.llvm_closure_type_ptr);
 
             llvm::Value* new_closure = emitter.getBuilder()->CreateCall(g.funcs.createClosure, passed_closure);
-            _setFake(internString(CREATED_CLOSURE_NAME),
-                     new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true));
+            symbol_table[internString(CREATED_CLOSURE_NAME)]
+                = new ConcreteCompilerVariable(getCreatedClosureType(), new_closure, true);
         }
 
         if (irstate->getSourceInfo()->is_generator) {
-            _setFake(internString(PASSED_GENERATOR_NAME), new ConcreteCompilerVariable(GENERATOR, AI, true));
+            symbol_table[internString(PASSED_GENERATOR_NAME)] = new ConcreteCompilerVariable(GENERATOR, AI, true);
             ++AI;
         }
 

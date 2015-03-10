@@ -801,7 +801,11 @@ error:
 }
 
 Box* fileIterNext(BoxedFile* s) {
-    return fileReadline1(s);
+    Box* rtn = fileReadline1(s);
+    assert(!rtn || rtn->cls == str_cls);
+    if (!rtn || ((BoxedString*)rtn)->s.empty())
+        raiseExcHelper(StopIteration, "");
+    return rtn;
 }
 
 bool fileEof(BoxedFile* self) {
@@ -824,8 +828,7 @@ extern "C" void PyFile_SetFP(PyObject* _f, FILE* fp) noexcept {
 }
 
 extern "C" PyObject* PyFile_FromFile(FILE* fp, char* name, char* mode, int (*close)(FILE*)) noexcept {
-    RELEASE_ASSERT(close == fclose, "unsupported");
-    return new BoxedFile(fp, name, mode);
+    return new BoxedFile(fp, name, mode, close);
 }
 
 extern "C" FILE* PyFile_AsFile(PyObject* f) noexcept {
@@ -974,7 +977,7 @@ extern "C" int PyFile_SoftSpace(PyObject* f, int newflag) noexcept {
     try {
         return softspace(f, newflag);
     } catch (ExcInfo e) {
-        abort();
+        return 0;
     }
 }
 
@@ -1082,8 +1085,8 @@ void fileDestructor(Box* b) {
     assert(isSubclass(b->cls, file_cls));
     BoxedFile* self = static_cast<BoxedFile*>(b);
 
-    if (self->f_fp)
-        fclose(self->f_fp);
+    if (self->f_fp && self->f_close)
+        self->f_close(self->f_fp);
     self->f_fp = NULL;
 }
 
