@@ -9,6 +9,7 @@ def f():
     a = 0
     b = 0
     e = 0
+    r = 0
     def g():
         def h():
             print b
@@ -38,6 +39,9 @@ def f():
         # So it should look like:
         # a:0, b:0, c:0, d:2, e:0
         print locals()
+
+    def unused():
+        print r
     g()
 f()
 
@@ -93,6 +97,22 @@ def f(arg):
     print d
 f(12)
 
+def f(arg):
+    exec "r = 12"
+    a = 2
+    d = locals()
+    print d
+    a = 3
+    print d
+    locals()
+    print d
+    del a
+    print d
+    locals()
+    print d
+f(12)
+
+
 def f():
     a = 5
     def g():
@@ -128,6 +148,12 @@ class C(object):
     except NameError:
         print 'foo NameError'
 
+foo = 0
+class C(object):
+    foo = 1
+    print foo
+    del foo
+    print foo
 
 class C(object):
     a = 2
@@ -139,3 +165,17 @@ class C(object):
     print d
     del a
     print d
+
+def f(moo):
+    class C(object):
+        a = 2
+        d = locals()
+        print d
+        a = 3
+        print d
+        locals()
+        print d
+        del a
+        print d
+        print moo
+f(2134)
