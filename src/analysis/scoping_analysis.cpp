@@ -134,17 +134,17 @@ struct ScopingAnalysis::ScopeNameUsage {
     StrSet passthrough_accesses; // what names a child scope accesses a name from a parent scope
 
     // `import *` and `exec` both force the scope to use the NAME lookup
-    bool hasNameForcingSyntax;
     AST_ImportFrom* nameForcingNodeImportStar;
     AST_Exec* nameForcingNodeBareExec;
+    bool hasNameForcingSyntax() { return nameForcingNodeImportStar != NULL || nameForcingNodeBareExec != NULL; }
 
     // If it has a free variable / if any child has a free variable
     bool free;
     bool child_free;
 
     ScopeNameUsage(AST* node, ScopeNameUsage* parent, ScopingAnalysis* scoping)
-        : node(node), parent(parent), scoping(scoping), hasNameForcingSyntax(false), nameForcingNodeImportStar(NULL),
-          nameForcingNodeBareExec(NULL), free(false), child_free(false) {
+        : node(node), parent(parent), scoping(scoping), nameForcingNodeImportStar(NULL), nameForcingNodeBareExec(NULL),
+          free(false), child_free(false) {
         if (node->type == AST_TYPE::ClassDef) {
             AST_ClassDef* classdef = ast_cast<AST_ClassDef>(node);
 
@@ -289,13 +289,11 @@ public:
     void doImportStar(AST_ImportFrom* node) {
         if (cur->nameForcingNodeImportStar == NULL)
             cur->nameForcingNodeImportStar = node;
-        cur->hasNameForcingSyntax = true;
     }
 
     void doBareExec(AST_Exec* node) {
         if (cur->nameForcingNodeBareExec == NULL)
             cur->nameForcingNodeBareExec = node;
-        cur->hasNameForcingSyntax = true;
     }
 
     bool visit_name(AST_Name* node) override {
@@ -488,9 +486,11 @@ public:
     }
 
     bool visit_importfrom(AST_ImportFrom* node) override {
+        mangleNameInPlace(node->module, cur->private_name, scoping->getInternedStrings());
         for (int i = 0; i < node->names.size(); i++) {
             AST_alias* alias = node->names[i];
             if (alias->name.str() == std::string("*")) {
+                mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
                 doImportStar(node);
             } else {
                 mangleNameInPlace(alias->asname, cur->private_name, scoping->getInternedStrings());
@@ -614,7 +614,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
 
     for (const auto& p : *usages) {
         ScopeNameUsage* usage = p.second;
-        if (usage->hasNameForcingSyntax && usage->node->type == AST_TYPE::FunctionDef) {
+        if (usage->hasNameForcingSyntax() && usage->node->type == AST_TYPE::FunctionDef) {
             if (usage->child_free)
                 raiseNameForcingSyntaxError("contains a nested function with free variables", usage);
             else if (usage->free)
@@ -644,7 +644,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::Lambda:
             case AST_TYPE::GeneratorExp: {
                 ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node,
-                                                             usage->hasNameForcingSyntax /* usesNameLookup */);
+                                                             usage->hasNameForcingSyntax() /* usesNameLookup */);
                 this->scopes[node] = scopeInfo;
                 break;
             }

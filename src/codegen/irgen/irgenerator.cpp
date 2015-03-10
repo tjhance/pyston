@@ -109,6 +109,7 @@ llvm::Value* IRGenState::getFrameInfoVar() {
 
         frame_info = al;
     }
+
     return frame_info;
 }
 
@@ -1591,10 +1592,9 @@ private:
 
         CompilerVariable* body = evalExpr(node->body, unw_info);
         ConcreteCompilerVariable* cbody = body->makeConverted(emitter, body->getBoxType());
+        body->decvref(emitter);
 
         emitter.createCall(unw_info, g.funcs.runExec, cbody->getValue());
-
-        body->decvref(emitter);
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {

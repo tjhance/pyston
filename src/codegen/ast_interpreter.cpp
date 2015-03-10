@@ -159,16 +159,19 @@ void ASTInterpreter::addSymbol(InternedString name, Box* value, bool allow_dupli
 }
 
 void ASTInterpreter::setGenerator(Box* gen) {
+    assert(!this->generator); // This should only used for initialization
     assert(gen->cls == generator_cls);
     this->generator = static_cast<BoxedGenerator*>(gen);
 }
 
 void ASTInterpreter::setPassedClosure(Box* closure) {
+    assert(!this->passed_closure); // This should only used for initialization
     assert(closure->cls == closure_cls);
     this->passed_closure = static_cast<BoxedClosure*>(closure);
 }
 
 void ASTInterpreter::setCreatedClosure(Box* closure) {
+    assert(!this->created_closure); // This should only used for initialization
     assert(closure->cls == closure_cls);
     this->created_closure = static_cast<BoxedClosure*>(closure);
 }

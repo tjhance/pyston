@@ -46,7 +46,7 @@ public:
         CompilerType* type;
     };
 
-private:
+public:
     CompiledFunction* const parent_cf;
     const ICSetupInfo* icinfo;
     int num_ic_stackmap_args;

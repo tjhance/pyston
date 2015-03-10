@@ -363,7 +363,7 @@ static Box* compileAndRunExec(AST_Suite* suite, BoxedModule* bm, Box* boxedLocal
     return astInterpretFunctionEval(cf, boxedLocals);
 }
 
-Box* runExec(Box* boxedCode) {
+extern "C" Box* runExec(Box* boxedCode) {
     // TODO implement full functionality (globals and locals)
     RELEASE_ASSERT(boxedCode->cls == str_cls, "eval not implemented for non-strings");
 
