@@ -91,25 +91,24 @@ public:
     ScopeInfo* getParent() override { return NULL; }
 
     bool createsClosure() override { return false; }
-
     bool takesClosure() override { return false; }
-
     bool passesThroughClosure() override { return false; }
 
-    bool refersToGlobal(InternedString name) override {
+    bool refersToGlobal(InternedString name) {
         if (isCompilerCreatedName(name))
             return false;
 
         // assert(name[0] != '#' && "should test this");
         return true;
     }
-    bool refersToClosure(InternedString name) override { return false; }
-    bool saveInClosure(InternedString name) override { return false; }
+
     VarScopeType getScopeTypeOfName(InternedString name) override {
         return refersToGlobal(name) ? VarScopeType::GLOBAL : VarScopeType::FAST;
     }
 
     bool usesNameLookup() override { return false; }
+
+    bool isPassedToViaClosure(InternedString name) override { return false; }
 
     InternedString mangleName(InternedString id) override { return id; }
     InternedString internString(llvm::StringRef s) override { abort(); }
@@ -213,7 +212,7 @@ public:
 
     bool passesThroughClosure() override { return usage->passthrough_accesses.size() > 0 && !createsClosure(); }
 
-    bool refersToGlobal(InternedString name) override {
+    bool refersToGlobal(InternedString name) {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
@@ -224,13 +223,13 @@ public:
             return false;
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
-    bool refersToClosure(InternedString name) override {
+    bool refersToClosure(InternedString name) {
         // HAX
         if (isCompilerCreatedName(name))
             return false;
         return usage->got_from_closure.count(name) != 0;
     }
-    bool saveInClosure(InternedString name) override {
+    bool saveInClosure(InternedString name) {
         // HAX
         if (isCompilerCreatedName(name) || usesNameLookup_)
             return false;
@@ -253,6 +252,8 @@ public:
     }
 
     bool usesNameLookup() override { return usesNameLookup_; }
+
+    bool isPassedToViaClosure(InternedString name) override { return refersToClosure(name); }
 
     InternedString mangleName(const InternedString id) override {
         return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());

@@ -310,7 +310,7 @@ void ASTInterpreter::eraseDeadSymbols() {
         if (!source_info->liveness->isLiveAtEnd(it.first, current_block)) {
             dead_symbols.push_back(it.first);
         } else if (source_info->phis->isRequiredAfter(it.first, current_block)) {
-            assert(!scope_info->refersToGlobal(it.first));
+            assert(scope_info->getScopeTypeOfName(it.first) != ScopeInfo::VarScopeType::GLOBAL);
         } else {
         }
     }
@@ -345,7 +345,7 @@ void ASTInterpreter::doStore(InternedString name, Value value) {
         setitem(frame_info.boxedLocals, boxString(name.str()), value.o);
     } else {
         sym_table[name] = value.o;
-        if (scope_info->saveInClosure(name))
+        if (vst == ScopeInfo::VarScopeType::CLOSURE)
             setattr(created_closure, name.c_str(), value.o);
     }
 }
@@ -817,9 +817,7 @@ Value ASTInterpreter::visit_delete(AST_Delete* node) {
                     }
                     d.erase(it);
                 } else {
-                    assert(!scope_info->refersToClosure(target->id));
-                    assert(!scope_info->saveInClosure(
-                        target->id)); // SyntaxError: can not delete variable 'x' referenced in nested scope
+                    assert(vst == ScopeInfo::VarScopeType::FAST);
 
                     if (sym_table.count(target->id) == 0) {
                         assertNameDefined(0, target->id.c_str(), NameError, true /* local_var_msg */);

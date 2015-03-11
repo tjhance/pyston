@@ -63,12 +63,23 @@ public:
     //  print dis.dis(g)
 
     enum class VarScopeType { FAST, GLOBAL, CLOSURE, DEREF, NAME };
-
-    virtual bool refersToGlobal(InternedString name) = 0;
-    virtual bool refersToClosure(InternedString name) = 0;
-    virtual bool saveInClosure(InternedString name) = 0;
     virtual VarScopeType getScopeTypeOfName(InternedString name) = 0;
 
+    // Returns true if the variable should be passed via a closure to this scope.
+    // Note that:
+    //      (a) This can be false even if there is an entry in the closure object
+    //          passed to the scope, if the variable is not actually used in this
+    //          scope or any child scopes.
+    //      (b) This can be true even if it is not used in this scope, if it
+    //          is used in a child scope.
+    // TODO this is currently not implemented correctly: (b) is not true.
+
+    virtual bool isPassedToViaClosure(InternedString name) = 0;
+
+    // Returns true if the scope may contain NAME variables.
+    // In particular, it returns true for ClassDef scope, for any scope
+    // with an `exec` statement or `import *` statement in it, or for any
+    // `exec` or `eval` scope.
     virtual bool usesNameLookup() = 0;
 
     virtual InternedString mangleName(InternedString id) = 0;

@@ -737,7 +737,7 @@ Box* fastLocalsToBoxedLocals() {
                 int offset = attr_offset.second;
                 Box* val = closure->attrs.attr_list->attrs[offset];
                 ScopeInfo* scope_info = cf->clfunc->source->getScopeInfo();
-                if (val != NULL && scope_info->refersToClosure(scope_info->internString(name))) {
+                if (val != NULL && scope_info->isPassedToViaClosure(scope_info->internString(name))) {
                     Box* boxedName = boxString(name);
                     if (d->d.count(boxedName) == 0) {
                         d->d[boxString(name)] = val;

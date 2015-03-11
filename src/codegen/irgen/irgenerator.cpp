@@ -1218,12 +1218,10 @@ private:
         assert(name.str() != "None");
 
         auto scope_info = irstate->getScopeInfo();
-        assert(!scope_info->refersToClosure(name));
-
         ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(name);
-        if (vst == ScopeInfo::VarScopeType::GLOBAL) {
-            assert(!scope_info->saveInClosure(name));
+        assert(vst != ScopeInfo::VarScopeType::DEREF);
 
+        if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // TODO do something special here so that it knows to only emit a monomorphic inline cache?
             ConcreteCompilerVariable* module = new ConcreteCompilerVariable(
                 MODULE, embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_value_type_ptr), false);
@@ -1236,6 +1234,8 @@ private:
             emitter.createCall3(unw_info, g.funcs.boxedLocalsSet, boxedLocals, attr,
                                 val->makeConverted(emitter, UNKNOWN)->getValue());
         } else {
+            // FAST or CLOSURE
+
             CompilerVariable*& prev = symbol_table[name];
             if (prev != NULL) {
                 prev->decvref(emitter);
@@ -1248,7 +1248,7 @@ private:
             InternedString defined_name = getIsDefinedName(name);
             _popFake(defined_name, true);
 
-            if (scope_info->saveInClosure(name)) {
+            if (vst == ScopeInfo::VarScopeType::CLOSURE) {
                 CompilerVariable* closure = symbol_table[internString(CREATED_CLOSURE_NAME)];
                 assert(closure);
 
@@ -1484,7 +1484,8 @@ private:
 
     void _doDelName(AST_Name* target, UnwindInfo unw_info) {
         auto scope_info = irstate->getScopeInfo();
-        if (scope_info->refersToGlobal(target->id)) {
+        ScopeInfo::VarScopeType vst = scope_info->getScopeTypeOfName(target->id);
+        if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             // Can't use delattr since the errors are different:
             emitter.createCall2(unw_info, g.funcs.delGlobal,
                                 embedConstantPtr(irstate->getSourceInfo()->parent_module, g.llvm_module_type_ptr),
@@ -1492,16 +1493,16 @@ private:
             return;
         }
 
-        if (scope_info->getScopeTypeOfName(target->id) == ScopeInfo::VarScopeType::NAME) {
+        if (vst == ScopeInfo::VarScopeType::NAME) {
             llvm::Value* boxedLocals = irstate->getBoxedLocalsVar();
             llvm::Value* attr = getStringConstantPtr(target->id.str() + '\0');
             emitter.createCall2(unw_info, g.funcs.boxedLocalsDel, boxedLocals, attr);
             return;
         }
 
-        assert(!scope_info->refersToClosure(target->id));
-        assert(!scope_info->saveInClosure(
-            target->id)); // SyntaxError: can not delete variable 'x' referenced in nested scope
+        // Can't be in a closure because of this syntax error:
+        // SyntaxError: can not delete variable 'x' referenced in nested scope
+        assert(vst == ScopeInfo::VarScopeType::FAST);
 
         if (symbol_table.count(target->id) == 0) {
             llvm::CallSite call = emitter.createCall(
@@ -2078,7 +2079,7 @@ private:
                 it->second->decvref(emitter);
                 it = symbol_table.erase(it);
             } else if (source->phis->isRequiredAfter(it->first, myblock)) {
-                assert(!scope_info->refersToGlobal(it->first));
+                assert(scope_info->getScopeTypeOfName(it->first) != ScopeInfo::VarScopeType::GLOBAL);
                 ConcreteCompilerType* phi_type = types->getTypeAtBlockEnd(it->first, myblock);
                 // printf("Converting %s from %s to %s\n", it->first.c_str(),
                 // it->second->getType()->debugName().c_str(), phi_type->debugName().c_str());
@@ -2111,7 +2112,7 @@ private:
         const PhiAnalysis::RequiredSet& all_phis = source->phis->getAllRequiredAfter(myblock);
         for (PhiAnalysis::RequiredSet::const_iterator it = all_phis.begin(), end = all_phis.end(); it != end; ++it) {
             // printf("phi will be required for %s\n", it->c_str());
-            assert(!scope_info->refersToGlobal(*it));
+            assert(scope_info->getScopeTypeOfName(*it) != ScopeInfo::VarScopeType::GLOBAL);
             CompilerVariable*& cur = symbol_table[*it];
 
             InternedString defined_name = getIsDefinedName(*it);
@@ -2238,7 +2239,8 @@ public:
 
     void giveLocalSymbol(InternedString name, CompilerVariable* var) override {
         assert(name.str() != "None");
-        ASSERT(!irstate->getScopeInfo()->refersToGlobal(name), "%s", name.c_str());
+        ASSERT(irstate->getScopeInfo()->getScopeTypeOfName(name) != ScopeInfo::VarScopeType::GLOBAL, "%s",
+               name.c_str());
         assert(var->getType() != BOXED_INT);
         assert(var->getType() != BOXED_FLOAT);
         CompilerVariable*& cur = symbol_table[name];
