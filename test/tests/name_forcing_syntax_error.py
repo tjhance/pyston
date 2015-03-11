@@ -131,11 +131,31 @@ class C(object):
     def g():
         exec "a = 5"
 
-""", #"""
-#def f():
-#    exec "a = 5"
-#    return {b for b in xrange(3)}
-#"""
+""", """
+def f():
+    exec "a = 5"
+    return {b for b in xrange(3)}
+""", """
+def f():
+    exec "a = 5"
+    return [b for b in xrange(3)]
+""", """
+def f():
+    exec "a = 5"
+    return {b:b for b in xrange(3)}
+""", """
+def f():
+    exec "a = 5"
+    return {c for b in xrange(3)}
+""", """
+def f():
+    exec "a = 5"
+    return [c for b in xrange(3)]
+""", """
+def f():
+    exec "a = 5"
+    return {c:b for b in xrange(3)}
+"""
 
 ]
 
