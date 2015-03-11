@@ -45,7 +45,7 @@ def main():
     c.c = 3
     c.d = 4
 
-    for i in xrange(2000):
+    for i in xrange(900):
         print i
 
         if i == 500:
