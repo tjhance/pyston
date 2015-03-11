@@ -98,19 +98,18 @@ llvm::Value* IRGenState::getFrameInfoVar() {
         builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), exctype_gep);
 
         // frame_info.boxedLocals = NULL
-        // OR
-        // frame_info.boxedLocals = createDict()
-        llvm::Value* boxed_locals_value;
-        if (getScopeInfo()->usesNameLookup()) {
-            boxed_locals_value = this->boxed_locals = builder.CreateCall(g.funcs.createDict);
-        } else {
-            boxed_locals_value = embedConstantPtr(NULL, g.llvm_value_type_ptr);
-        }
         static_assert(offsetof(FrameInfo, exc) == 0, "");
         static_assert(sizeof(ExcInfo) == 24, "");
         static_assert(offsetof(FrameInfo, boxedLocals) == 24, "");
         llvm::Value* boxed_locals_gep = builder.CreateConstInBoundsGEP2_32(al, 0, 1);
-        builder.CreateStore(boxed_locals_value, boxed_locals_gep);
+        builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), boxed_locals_gep);
+
+        if (getScopeInfo()->usesNameLookup()) {
+            // frame_info.boxedLocals = createDict()
+            // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
+            this->boxed_locals = builder.CreateCall(g.funcs.createDict);
+            builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+        }
 
         frame_info = al;
     }
