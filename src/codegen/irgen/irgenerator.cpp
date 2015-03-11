@@ -85,6 +85,11 @@ llvm::Value* IRGenState::getFrameInfoVar() {
         llvm::AllocaInst* al = builder.CreateAlloca(g.frame_info_type, NULL, "frame_info");
         assert(al->isStaticAlloca());
 
+        if (entry_block.getTerminator())
+            builder.SetInsertPoint(entry_block.getTerminator());
+        else
+            builder.SetInsertPoint(&entry_block);
+
         // frame_info.exc.type = NULL
         static_assert(offsetof(FrameInfo, exc) == 0, "");
         static_assert(offsetof(ExcInfo, type) == 0, "");
