@@ -194,8 +194,6 @@ private:
 public:
     ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup)
         : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup) {
-        // not true anymore: Expression
-        // assert(parent);
         assert(usage);
         assert(ast);
     }
@@ -253,7 +251,12 @@ public:
 
     bool usesNameLookup() override { return usesNameLookup_; }
 
-    bool isPassedToViaClosure(InternedString name) override { return refersToClosure(name); }
+    bool isPassedToViaClosure(InternedString name) override {
+        if (isCompilerCreatedName(name))
+            return false;
+
+        return usage->got_from_closure.count(name) > 0 || usage->passthrough_accesses.count(name) > 0;
+    }
 
     InternedString mangleName(const InternedString id) override {
         return pyston::mangleName(id, usage->private_name, usage->scoping->getInternedStrings());
