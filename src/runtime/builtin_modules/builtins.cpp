@@ -410,27 +410,23 @@ extern "C" Box* ord(Box* obj) {
 Box* range(Box* start, Box* stop, Box* step) {
     i64 istart, istop, istep;
     if (stop == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-
         istart = 0;
-        istop = static_cast<BoxedInt*>(start)->n;
+        istop = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
         istep = 1;
     } else if (step == NULL) {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
-
-        istart = static_cast<BoxedInt*>(start)->n;
-        istop = static_cast<BoxedInt*>(stop)->n;
+        istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
+        istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
         istep = 1;
     } else {
-        RELEASE_ASSERT(isSubclass(start->cls, int_cls), "%s", getTypeName(start));
-        RELEASE_ASSERT(isSubclass(stop->cls, int_cls), "%s", getTypeName(stop));
-        RELEASE_ASSERT(isSubclass(step->cls, int_cls), "%s", getTypeName(step));
-
-        istart = static_cast<BoxedInt*>(start)->n;
-        istop = static_cast<BoxedInt*>(stop)->n;
-        istep = static_cast<BoxedInt*>(step)->n;
-        RELEASE_ASSERT(istep != 0, "step can't be 0");
+        istart = PyLong_AsLong(start);
+        checkAndThrowCAPIException();
+        istop = PyLong_AsLong(stop);
+        checkAndThrowCAPIException();
+        istep = PyLong_AsLong(step);
+        checkAndThrowCAPIException();
     }
 
     BoxedList* rtn = new BoxedList();
@@ -1180,13 +1176,13 @@ void setupBuiltins() {
     builtins_module->giveAttr("memoryview", memoryview_cls);
     PyType_Ready(&PyByteArray_Type);
     builtins_module->giveAttr("bytearray", &PyByteArray_Type);
+    Py_TYPE(&PyBuffer_Type) = &PyType_Type;
+    PyType_Ready(&PyBuffer_Type);
+    builtins_module->giveAttr("buffer", &PyBuffer_Type);
 
     builtins_module->giveAttr(
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
     builtins_module->giveAttr("callable",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1), "callable"));
-
-    BoxedClass* buffer_cls = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "buffer");
-    builtins_module->giveAttr("buffer", buffer_cls);
 }
 }

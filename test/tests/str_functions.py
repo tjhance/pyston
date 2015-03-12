@@ -38,6 +38,8 @@ for c in "hello world":
 
 for c in "hello world":
     print c, "hello world".count(c)
+    print c, "hello world".count(c, 1, 2)
+    print c, "hello world".count(c, 2, 5)
 
 for i in xrange(1, 10):
     for j in xrange(1, 4):
@@ -132,6 +134,8 @@ for c in "hello world":
     gc.collect()
 
 print "hello world".index("world")
+print "hello world".index("world", 1, 30)
+print "hello world".index("l", 3)
 try:
     print "hello world".index("goodbye")
 except:
@@ -145,3 +149,6 @@ print "hello world".endswith(("x", "h"))
 
 print "a.b.c.d".partition('.')
 print "a.b.c.d".rpartition('.')
+
+print 'ab c\n\nde fg\rkl\r\n'.splitlines()
+print 'ab c\n\nde fg\rkl\r\n'.splitlines(True)

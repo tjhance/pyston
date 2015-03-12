@@ -293,6 +293,11 @@ void BoxedClass::freeze() {
 
     fixup_slot_dispatchers(this);
 
+    if (instancesHaveDictAttrs() || instancesHaveHCAttrs())
+        ASSERT(this == closure_cls || this == classobj_cls || this == instance_cls
+                   || typeLookup(this, "__dict__", NULL),
+               "%s", tp_name);
+
     is_constant = true;
 }
 
@@ -1484,6 +1489,12 @@ Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArg
         return descr;
     }
 
+    // TODO this shouldn't go here; it should be in instancemethod_cls->tp_getattr[o]
+    if (obj->cls == instancemethod_cls) {
+        assert(!rewrite_args || !rewrite_args->out_success);
+        return getattrInternalGeneral(static_cast<BoxedInstanceMethod*>(obj)->func, attr, NULL, cls_only, for_call,
+                                      bind_obj_out, NULL);
+    }
     // Finally, check __getattr__
 
     if (!cls_only) {
@@ -1851,8 +1862,13 @@ extern "C" BoxedString* str(Box* obj) {
         obj = callattrInternal(obj, &str_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
     }
 
-    if (obj->cls != str_cls) {
-        raiseExcHelper(TypeError, "__str__ did not return a string!");
+    if (isSubclass(obj->cls, unicode_cls)) {
+        obj = PyUnicode_AsASCIIString(obj);
+        checkAndThrowCAPIException();
+    }
+
+    if (!isSubclass(obj->cls, str_cls)) {
+        raiseExcHelper(TypeError, "__str__ returned non-string (type %s)", obj->cls->tp_name);
     }
     return static_cast<BoxedString*>(obj);
 }
@@ -1863,8 +1879,13 @@ extern "C" BoxedString* repr(Box* obj) {
 
     obj = callattrInternal(obj, &repr_str, CLASS_ONLY, NULL, ArgPassSpec(0), NULL, NULL, NULL, NULL, NULL);
 
-    if (obj->cls != str_cls) {
-        raiseExcHelper(TypeError, "__repr__ did not return a string!");
+    if (isSubclass(obj->cls, unicode_cls)) {
+        obj = PyUnicode_AsASCIIString(obj);
+        checkAndThrowCAPIException();
+    }
+
+    if (!isSubclass(obj->cls, str_cls)) {
+        raiseExcHelper(TypeError, "__repr__ returned non-string (type %s)", obj->cls->tp_name);
     }
     return static_cast<BoxedString*>(obj);
 }
@@ -1928,7 +1949,9 @@ extern "C" BoxedInt* hash(Box* obj) {
     Box* hash = getclsattr_internal(obj, "__hash__", NULL);
 
     if (hash == NULL) {
-        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls, "%s.__hash__", getTypeName(obj));
+        ASSERT(isUserDefined(obj->cls) || obj->cls == function_cls || obj->cls == object_cls || obj->cls == classobj_cls
+                   || obj->cls == module_cls,
+               "%s.__hash__", getTypeName(obj));
         // TODO not the best way to handle this...
         return static_cast<BoxedInt*>(boxInt((i64)obj));
     }

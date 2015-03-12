@@ -74,6 +74,7 @@ extern "C" void init_io();
 extern "C" void initzipimport();
 extern "C" void init_csv();
 extern "C" void init_ssl();
+extern "C" void init_sqlite3();
 
 namespace pyston {
 
@@ -289,8 +290,6 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
         this->modname = boxStringPtr(&builtinStr);
     }
 
-    this->giveAttr("__doc__", None);
-
     assert(f->num_defaults == ndefaults);
 }
 
@@ -307,6 +306,8 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
     if (f->source) {
         this->name = static_cast<BoxedString*>(boxString(f->source->getName()));
     }
+
+    this->giveAttr("__doc__", None);
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name)
@@ -1758,9 +1759,8 @@ void setupRuntime() {
                                  offsetof(BoxedFunction, in_weakreflist), sizeof(BoxedFunction), false, "function");
 
     builtin_function_or_method_cls = BoxedHeapClass::create(
-        type_cls, object_cls, &functionGCHandler, offsetof(BoxedBuiltinFunctionOrMethod, attrs),
-        offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist), sizeof(BoxedBuiltinFunctionOrMethod), false,
-        "builtin_function_or_method");
+        type_cls, object_cls, &functionGCHandler, 0, offsetof(BoxedBuiltinFunctionOrMethod, in_weakreflist),
+        sizeof(BoxedBuiltinFunctionOrMethod), false, "builtin_function_or_method");
     function_cls->simple_destructor = builtin_function_or_method_cls->simple_destructor = functionDtor;
 
     instancemethod_cls = BoxedHeapClass::create(type_cls, object_cls, &instancemethodGCHandler, 0,
@@ -1840,6 +1840,7 @@ void setupRuntime() {
     module_cls->giveAttr("__new__",
                          new BoxedFunction(boxRTFunction((void*)moduleNew, UNKNOWN, 3, 1, false, false), { NULL }));
     module_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)moduleRepr, STR, 1)));
+    module_cls->giveAttr("__dict__", dict_descr);
     module_cls->freeze();
 
     closure_cls->freeze();
@@ -1926,6 +1927,10 @@ void setupRuntime() {
     attrwrapper_cls->giveAttr("keys", new BoxedFunction(boxRTFunction((void*)AttrWrapper::keys, LIST, 1)));
     attrwrapper_cls->giveAttr("values", new BoxedFunction(boxRTFunction((void*)AttrWrapper::values, LIST, 1)));
     attrwrapper_cls->giveAttr("items", new BoxedFunction(boxRTFunction((void*)AttrWrapper::items, LIST, 1)));
+    // TODO: not quite right
+    attrwrapper_cls->giveAttr("iterkeys", attrwrapper_cls->getattr("keys"));
+    attrwrapper_cls->giveAttr("itervalues", attrwrapper_cls->getattr("values"));
+    attrwrapper_cls->giveAttr("iteritems", attrwrapper_cls->getattr("items"));
     attrwrapper_cls->giveAttr("copy", new BoxedFunction(boxRTFunction((void*)AttrWrapper::copy, UNKNOWN, 1)));
     attrwrapper_cls->giveAttr("__len__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::len, BOXED_INT, 1)));
     attrwrapper_cls->giveAttr("__iter__", new BoxedFunction(boxRTFunction((void*)AttrWrapper::iter, UNKNOWN, 1)));
@@ -1985,6 +1990,7 @@ void setupRuntime() {
     initzipimport();
     init_csv();
     init_ssl();
+    init_sqlite3();
 
     // some additional setup to ensure weakrefs participate in our GC
     BoxedClass* weakref_ref_cls = &_PyWeakref_RefType;
