@@ -585,18 +585,15 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
     for (const auto& p : *usages) {
         ScopeNameUsage* usage = p.second;
 
+        bool is_any_name_free = false;
+
         for (const auto& name : usage->read) {
             if (usage->forced_globals.count(name))
                 continue;
             if (usage->written.count(name))
                 continue;
 
-            if (usage->parent != NULL && usage->parent->parent != NULL) {
-                usage->free = true;
-                for (ScopeNameUsage* parent = usage->parent; parent != NULL; parent = parent->parent) {
-                    parent->child_free = true;
-                }
-            }
+            bool is_name_free = true;
 
             std::vector<ScopeNameUsage*> intermediate_parents;
 
@@ -606,6 +603,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
                     intermediate_parents.push_back(parent);
                     parent = parent->parent;
                 } else if (parent->forced_globals.count(name)) {
+                    is_name_free = false;
                     break;
                 } else if (parent->written.count(name)) {
                     usage->got_from_closure.insert(name);
@@ -621,12 +619,27 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
                     parent = parent->parent;
                 }
             }
+
+            if (is_name_free)
+                is_any_name_free = true;
+        }
+
+        if (is_any_name_free) {
+            // This intentionally loops through *all* parents, not just the ones in intermediate_parents
+            // Label any parent FunctionDef as `child_free`, and if such a parent exists, also label
+            // this node as `free` itself.
+            for (ScopeNameUsage* parent = usage->parent; parent != NULL; parent = parent->parent) {
+                if (parent->node->type == AST_TYPE::FunctionDef) {
+                    usage->free = true;
+                    parent->child_free = true;
+                }
+            }
         }
     }
 
     for (const auto& p : *usages) {
         ScopeNameUsage* usage = p.second;
-        if (usage->hasNameForcingSyntax() && usage->node->type == AST_TYPE::FunctionDef) {
+        if (usage->hasNameForcingSyntax()) {
             if (usage->child_free)
                 raiseNameForcingSyntaxError("contains a nested function with free variables", usage);
             else if (usage->free)

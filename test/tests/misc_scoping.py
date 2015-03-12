@@ -179,3 +179,21 @@ def f(moo):
         print d
         print moo
 f(2134)
+
+some_glob = 2
+def f():
+    global some_glob
+    def g():
+        exec "some_glob = 5"
+        print some_glob
+    g()
+f()
+
+some_glob = 2
+def f():
+    global some_glob
+    exec "some_glob = 5"
+    def g():
+        print some_glob
+    g()
+f()

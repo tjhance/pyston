@@ -129,6 +129,13 @@ def f():
 
 class C(object):
     def g():
+        a = 5
+        exec "a = 5"
+
+""", """
+
+class C(object):
+    def g():
         exec "a = 5"
 
 """, """
@@ -155,6 +162,41 @@ def f():
 def f():
     exec "a = 5"
     return {c:b for b in xrange(3)}
+""", """
+def f():
+    global a
+    def g():
+        print a
+        exec ""
+""", """
+def f():
+    global a
+    exec ""
+    def g():
+        print a
+""", """
+def f():
+    global a
+    def g():
+        a = 0
+        def h():
+            exec ""
+            print a
+""", """
+def f():
+    a = 0
+    def g():
+        global a
+        def h():
+            exec ""
+            print a
+""", """
+def f():
+    a = 0
+    def g():
+        exec ""
+        def h():
+            print a
 """
 
 ]
