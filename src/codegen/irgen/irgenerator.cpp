@@ -1600,7 +1600,7 @@ private:
         ConcreteCompilerVariable* cbody = body->makeConverted(emitter, body->getBoxType());
         body->decvref(emitter);
 
-        emitter.createCall(unw_info, g.funcs.runExec, cbody->getValue());
+        emitter.createCall(unw_info, g.funcs.exec, cbody->getValue());
     }
 
     void doPrint(AST_Print* node, UnwindInfo unw_info) {

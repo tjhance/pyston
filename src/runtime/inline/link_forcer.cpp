@@ -119,7 +119,7 @@ void force() {
     FORCE(mod_float_float);
     FORCE(pow_float_float);
 
-    FORCE(runExec);
+    FORCE(exec);
 
     FORCE(dump);
 

@@ -221,7 +221,7 @@ void initGlobalFuncs(GlobalState& g) {
     GET(listAppendInternal);
     GET(getSysStdout);
 
-    GET(runExec);
+    GET(exec);
     GET(boxedLocalsSet);
     GET(boxedLocalsGet);
     GET(boxedLocalsDel);

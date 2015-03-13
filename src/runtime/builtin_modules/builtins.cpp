@@ -683,16 +683,6 @@ Box* zip2(Box* container1, Box* container2) {
     return rtn;
 }
 
-Box* eval(Box* code) {
-    // TODO implement full functionality (args and stuff)
-    RELEASE_ASSERT(code->cls == str_cls, "eval not implemented for non-strings");
-
-    Box* boxedLocals = fastLocalsToBoxedLocals();
-    BoxedModule* module = getCurrentModule();
-
-    return runEval(static_cast<BoxedString*>(code)->s.c_str(), boxedLocals, module);
-}
-
 static Box* callable(Box* obj) {
     Box* r = PyBool_FromLong((long)PyCallable_Check(obj));
     checkAndThrowCAPIException();

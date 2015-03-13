@@ -72,7 +72,6 @@ public:
     //          scope or any child scopes.
     //      (b) This can be true even if it is not used in this scope, if it
     //          is used in a child scope.
-    // TODO this is currently not implemented correctly: (b) is not true.
 
     virtual bool isPassedToViaClosure(InternedString name) = 0;
 

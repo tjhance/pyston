@@ -879,7 +879,7 @@ Value ASTInterpreter::visit_exec(AST_Exec* node) {
 
     // TODO implement the locals and globals arguments
     Box* code = visit_expr(node->body).o;
-    runExec(code);
+    exec(code);
 
     return Value();
 }
