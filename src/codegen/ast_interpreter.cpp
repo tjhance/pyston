@@ -1065,21 +1065,21 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
         if (vst == ScopeInfo::VarScopeType::GLOBAL) {
             node->lookup_type = AST_Name::GLOBAL;
         } else if (vst == ScopeInfo::VarScopeType::DEREF) {
-            node->lookup_type = AST_Name::CLOSURE;
+            node->lookup_type = AST_Name::DEREF;
             return getattr(passed_closure, node->id.c_str());
         } else if (vst == ScopeInfo::VarScopeType::NAME) {
-            node->lookup_type = AST_Name::LOCAL;
+            node->lookup_type = AST_Name::NAME;
         } else {
-            node->lookup_type = AST_Name::FAST_LOCAL;
+            node->lookup_type = AST_Name::FAST_OR_CLOSURE;
         }
     }
 
     switch (node->lookup_type) {
         case AST_Name::GLOBAL:
             return getGlobal(source_info->parent_module, &node->id.str());
-        case AST_Name::CLOSURE:
+        case AST_Name::DEREF:
             return getattr(passed_closure, node->id.c_str());
-        case AST_Name::FAST_LOCAL: {
+        case AST_Name::FAST_OR_CLOSURE: {
             SymMap::iterator it = sym_table.find(node->id);
             if (it != sym_table.end())
                 return it->second;
@@ -1087,7 +1087,7 @@ Value ASTInterpreter::visit_name(AST_Name* node) {
             assertNameDefined(0, node->id.c_str(), UnboundLocalError, true);
             return Value();
         }
-        case AST_Name::LOCAL: {
+        case AST_Name::NAME: {
             assert(frame_info.boxedLocals->cls == dict_cls);
             auto& d = static_cast<BoxedDict*>(frame_info.boxedLocals)->d;
             auto it = d.find(boxString(node->id.str()));

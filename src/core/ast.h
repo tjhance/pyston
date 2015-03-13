@@ -697,13 +697,14 @@ public:
     // The resolved scope of this name.  Kind of hacky to be storing it in the AST node;
     // in CPython it ends up getting "cached" by being translated into one of a number of
     // different bytecodes.
-    // We don't have a separate bytecode representation, so just store it in here for now.
+    // This almost matches up with the bytecode types in ScopeInfo::VarScopeType, except
+    // for the addition of UNKNOWN and that FAST and CLOSURE are combined.
     enum LookupType {
         UNKNOWN,
         GLOBAL,
-        CLOSURE,
-        FAST_LOCAL,
-        LOCAL,
+        DEREF,
+        FAST_OR_CLOSURE,
+        NAME,
     } lookup_type;
 
     virtual void accept(ASTVisitor* v);
