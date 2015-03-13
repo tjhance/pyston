@@ -45,19 +45,19 @@ def main():
     c.c = 3
     c.d = 4
 
-    for i in xrange(900):
+    for i in xrange(300):
         print i
 
-        if i == 500:
+        if i == 60:
             c.a = []
 
-        if i == 600:
+        if i == 120:
             c.b = 1
 
-        if i == 700:
+        if i == 180:
             c.c = []
 
-        if i == 800:
+        if i == 240:
             c.b = 0
             c.d = 1.0
 
