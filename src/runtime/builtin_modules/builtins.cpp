@@ -171,12 +171,12 @@ extern "C" Box* dir(Box* obj) {
     }
 
     for (auto const& kv : obj->cls->attrs.hcls->attr_offsets) {
-        listAppend(result, boxString(kv.first));
+        listAppend(result, boxString(kv.first()));
     }
     if (obj->cls->instancesHaveHCAttrs()) {
         HCAttrs* attrs = obj->getHCAttrsPtr();
         for (auto const& kv : attrs->hcls->attr_offsets) {
-            listAppend(result, boxString(kv.first));
+            listAppend(result, boxString(kv.first()));
         }
     }
     if (obj->cls->instancesHaveDictAttrs()) {
@@ -548,7 +548,7 @@ Box* setattrFunc(Box* obj, Box* _str, Box* value) {
     }
 
     BoxedString* str = static_cast<BoxedString*>(_str);
-    setattrInternal(obj, str->s, value, NULL);
+    setattr(obj, str->s.c_str(), value);
     return None;
 }
 
@@ -970,8 +970,48 @@ Box* pydumpAddr(Box* p) {
     return None;
 }
 
+Box* builtinIter(Box* obj, Box* sentinel) {
+    if (sentinel == NULL)
+        return getiter(obj);
+
+    Box* r = PyCallIter_New(obj, sentinel);
+    if (!r)
+        throwCAPIException();
+    return r;
+}
+
+Box* rawInput(Box* prompt) {
+    Py_FatalError("unimplemented");
+}
+
+Box* input(Box* prompt) {
+    Py_FatalError("unimplemented");
+}
+
+Box* builtinRound(Box* _number, Box* _ndigits) {
+    if (!isSubclass(_number->cls, float_cls))
+        raiseExcHelper(TypeError, "a float is required");
+
+    BoxedFloat* number = (BoxedFloat*)_number;
+
+    if (isSubclass(_ndigits->cls, int_cls)) {
+        BoxedInt* ndigits = (BoxedInt*)_ndigits;
+
+        if (ndigits->n == 0)
+            return boxFloat(round(number->d));
+    }
+
+    Py_FatalError("unimplemented");
+}
+
+Box* builtinCmp(Box* lhs, Box* rhs) {
+    Py_FatalError("unimplemented");
+}
+
 void setupBuiltins() {
-    builtins_module = createModule("__builtin__", "__builtin__");
+    builtins_module = createModule("__builtin__", "__builtin__",
+                                   "Built-in functions, exceptions, and other objects.\n\nNoteworthy: None is "
+                                   "the `nil' object; Ellipsis represents `...' in slices.");
 
     BoxedHeapClass* ellipsis_cls
         = BoxedHeapClass::create(type_cls, object_cls, NULL, 0, 0, sizeof(Box), false, "ellipsis");
@@ -1097,6 +1137,10 @@ void setupBuiltins() {
                                                  { NULL, NULL });
     builtins_module->giveAttr("range", range_obj);
 
+    auto* round_obj = new BoxedBuiltinFunctionOrMethod(
+        boxRTFunction((void*)builtinRound, BOXED_FLOAT, 2, 1, false, false), "round", { boxInt(0) });
+    builtins_module->giveAttr("round", round_obj);
+
     setupXrange();
     builtins_module->giveAttr("xrange", xrange_cls);
 
@@ -1111,7 +1155,8 @@ void setupBuiltins() {
                                             boxRTFunction((void*)locals, UNKNOWN, 0, 0, false, false), "locals"));
 
     builtins_module->giveAttr(
-        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getiter, UNKNOWN, 1, 0, false, false), "iter"));
+        "iter", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinIter, UNKNOWN, 2, 1, false, false), "iter",
+                                                 { NULL }));
     builtins_module->giveAttr(
         "reversed",
         new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)getreversed, UNKNOWN, 1, 0, false, false), "reversed"));
@@ -1174,5 +1219,14 @@ void setupBuiltins() {
         "eval", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)eval, UNKNOWN, 1, 0, false, false), "eval"));
     builtins_module->giveAttr("callable",
                               new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)callable, UNKNOWN, 1), "callable"));
+
+    builtins_module->giveAttr(
+        "raw_input", new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)rawInput, UNKNOWN, 1, 1, false, false),
+                                                      "raw_input", { NULL }));
+    builtins_module->giveAttr(
+        "input",
+        new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)input, UNKNOWN, 1, 1, false, false), "input", { NULL }));
+    builtins_module->giveAttr("cmp",
+                              new BoxedBuiltinFunctionOrMethod(boxRTFunction((void*)builtinCmp, UNKNOWN, 2), "cmp"));
 }
 }

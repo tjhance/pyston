@@ -109,6 +109,9 @@ extern "C" PyObject* PystonType_GenericAlloc(BoxedClass* cls, Py_ssize_t nitems)
         assert(cls->tp_mro && "maybe we should just skip these checks if !mro");
         assert(cls->tp_mro->cls == tuple_cls);
         for (auto b : static_cast<BoxedTuple*>(cls->tp_mro)->elts) {
+            // old-style classes are always pyston classes:
+            if (b->cls == classobj_cls)
+                continue;
             assert(isSubclass(b->cls, type_cls));
             ASSERT(static_cast<BoxedClass*>(b)->is_pyston_class, "%s (%s)", cls->tp_name,
                    static_cast<BoxedClass*>(b)->tp_name);
@@ -260,14 +263,14 @@ std::string builtinStr("__builtin__");
 
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
     : in_weakreflist(NULL), f(f), closure(NULL), isGenerator(false), ndefaults(0), defaults(NULL), modname(NULL),
-      name(NULL) {
+      name(NULL), doc(NULL) {
     if (f->source) {
         this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);
+        this->doc = None;
     }
-
-    this->giveAttr("__doc__", None);
 
     assert(f->num_defaults == ndefaults);
 }
@@ -275,7 +278,7 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f)
 extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults,
                                                 BoxedClosure* closure, bool isGenerator)
     : in_weakreflist(NULL), f(f), closure(closure), isGenerator(isGenerator), ndefaults(0), defaults(NULL),
-      modname(NULL), name(NULL) {
+      modname(NULL), name(NULL), doc(NULL) {
     if (defaults.size()) {
         // make sure to initialize defaults first, since the GC behavior is triggered by ndefaults,
         // and a GC can happen within this constructor:
@@ -286,8 +289,10 @@ extern "C" BoxedFunctionBase::BoxedFunctionBase(CLFunction* f, std::initializer_
 
     if (f->source) {
         this->modname = f->source->parent_module->getattr("__name__", NULL);
+        this->doc = f->source->getDocString();
     } else {
         this->modname = boxStringPtr(&builtinStr);
+        this->doc = None;
     }
 
     assert(f->num_defaults == ndefaults);
@@ -306,21 +311,22 @@ BoxedFunction::BoxedFunction(CLFunction* f, std::initializer_list<Box*> defaults
     if (f->source) {
         this->name = static_cast<BoxedString*>(boxString(f->source->getName()));
     }
-
-    this->giveAttr("__doc__", None);
 }
 
-BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name)
+BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc)
     : BoxedBuiltinFunctionOrMethod(f, name, {}) {
+
+    this->doc = doc ? boxStrConstant(doc) : None;
 }
 
 BoxedBuiltinFunctionOrMethod::BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name,
                                                            std::initializer_list<Box*> defaults, BoxedClosure* closure,
-                                                           bool isGenerator)
+                                                           bool isGenerator, const char* doc)
     : BoxedFunctionBase(f, defaults, closure, isGenerator) {
 
     assert(name);
     this->name = static_cast<BoxedString*>(boxString(name));
+    this->doc = doc ? boxStrConstant(doc) : None;
 }
 
 extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
@@ -334,6 +340,9 @@ extern "C" void functionGCHandler(GCVisitor* v, Box* b) {
 
     if (f->modname)
         v->visit(f->modname);
+
+    if (f->doc)
+        v->visit(f->doc);
 
     if (f->closure)
         v->visit(f->closure);
@@ -357,9 +366,10 @@ static void functionDtor(Box* b) {
     self->dependent_ics.~ICInvalidator();
 }
 
-BoxedModule::BoxedModule(const std::string& name, const std::string& fn) : fn(fn) {
+BoxedModule::BoxedModule(const std::string& name, const std::string& fn, const char* doc) : fn(fn) {
     this->giveAttr("__name__", boxString(name));
     this->giveAttr("__file__", boxString(fn));
+    this->giveAttr("__doc__", doc ? boxStrConstant(doc) : None);
 }
 
 std::string BoxedModule::name() {
@@ -926,6 +936,7 @@ static void typeSetModule(Box* _type, PyObject* value, void* context) {
     type->setattr("__module__", value, NULL);
 }
 
+
 Box* typeHash(BoxedClass* self) {
     assert(isSubclass(self->cls, type_cls));
 
@@ -978,7 +989,7 @@ private:
     // Iterating over the an attrwrapper (~=dict) just gives the keys, which
     // just depends on the hidden class of the object.  Let's store only that:
     HiddenClass* hcls;
-    std::unordered_map<std::string, int>::iterator it;
+    decltype(HiddenClass::attr_offsets)::iterator it;
 
 public:
     AttrWrapperIter(AttrWrapper* aw);
@@ -1085,7 +1096,7 @@ public:
             first = false;
 
             BoxedString* v = attrs->attr_list->attrs[p.second]->reprICAsString();
-            os << p.first << ": " << v->s;
+            os << p.first().str() << ": " << v->s;
         }
         os << "})";
         return boxString(os.str());
@@ -1111,7 +1122,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         for (const auto& p : attrs->hcls->attr_offsets) {
-            listAppend(rtn, boxString(p.first));
+            listAppend(rtn, boxString(p.first()));
         }
         return rtn;
     }
@@ -1137,7 +1148,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         for (const auto& p : attrs->hcls->attr_offsets) {
-            BoxedTuple* t = new BoxedTuple({ boxString(p.first), attrs->attr_list->attrs[p.second] });
+            BoxedTuple* t = new BoxedTuple({ boxString(p.first()), attrs->attr_list->attrs[p.second] });
             listAppend(rtn, t);
         }
         return rtn;
@@ -1151,7 +1162,7 @@ public:
 
         HCAttrs* attrs = self->b->getHCAttrsPtr();
         for (const auto& p : attrs->hcls->attr_offsets) {
-            rtn->d[boxString(p.first)] = attrs->attr_list->attrs[p.second];
+            rtn->d[boxString(p.first())] = attrs->attr_list->attrs[p.second];
         }
         return rtn;
     }
@@ -1173,7 +1184,7 @@ public:
             HCAttrs* attrs = container->b->getHCAttrsPtr();
 
             for (const auto& p : attrs->hcls->attr_offsets) {
-                self->b->setattr(p.first, attrs->attr_list->attrs[p.second], NULL);
+                self->b->setattr(p.first(), attrs->attr_list->attrs[p.second], NULL);
             }
         } else if (_container->cls == dict_cls) {
             BoxedDict* container = static_cast<BoxedDict*>(_container);
@@ -1215,7 +1226,7 @@ Box* AttrWrapperIter::next(Box* _self) {
     AttrWrapperIter* self = static_cast<AttrWrapperIter*>(_self);
 
     assert(self->it != self->hcls->attr_offsets.end());
-    Box* r = boxString(self->it->first);
+    Box* r = boxString(self->it->first());
     ++self->it;
     return r;
 }
@@ -1266,6 +1277,17 @@ Box* objectRepr(Box* obj) {
 
 Box* objectStr(Box* obj) {
     return obj->reprIC();
+}
+
+Box* objectSetattr(Box* obj, Box* attr, Box* value) {
+    attr = coerceUnicodeToStr(attr);
+    if (attr->cls != str_cls) {
+        raiseExcHelper(TypeError, "attribute name must be string, not '%s'", attr->cls->tp_name);
+    }
+
+    BoxedString* attr_str = static_cast<BoxedString*>(attr);
+    setattrGeneric(obj, attr_str->s, value, NULL);
+    return None;
 }
 
 static PyObject* import_copyreg(void) noexcept {
@@ -1814,6 +1836,7 @@ void setupRuntime() {
     object_cls->giveAttr("__init__", new BoxedFunction(boxRTFunction((void*)objectInit, UNKNOWN, 1, 0, true, false)));
     object_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)objectRepr, UNKNOWN, 1, 0, false, false)));
     object_cls->giveAttr("__str__", new BoxedFunction(boxRTFunction((void*)objectStr, UNKNOWN, 1, 0, false, false)));
+    object_cls->giveAttr("__setattr__", new BoxedFunction(boxRTFunction((void*)objectSetattr, UNKNOWN, 3)));
 
     auto typeCallObj = boxRTFunction((void*)typeCall, UNKNOWN, 1, 0, true, true);
     typeCallObj->internal_callable = &typeCallInternal;
@@ -1878,6 +1901,8 @@ void setupRuntime() {
     function_cls->giveAttr("__repr__", new BoxedFunction(boxRTFunction((void*)functionRepr, STR, 1)));
     function_cls->giveAttr("__module__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT,
                                                                    offsetof(BoxedFunction, modname), false));
+    function_cls->giveAttr(
+        "__doc__", new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedFunction, doc), false));
     function_cls->giveAttr("__get__", new BoxedFunction(boxRTFunction((void*)functionGet, UNKNOWN, 3)));
     function_cls->giveAttr("__call__",
                            new BoxedFunction(boxRTFunction((void*)functionCall, UNKNOWN, 1, 0, true, true)));
@@ -1891,6 +1916,9 @@ void setupRuntime() {
         "__repr__", new BoxedFunction(boxRTFunction((void*)builtinFunctionOrMethodRepr, STR, 1)));
     builtin_function_or_method_cls->giveAttr(
         "__name__", new (pyston_getset_cls) BoxedGetsetDescriptor(builtinFunctionOrMethodName, NULL, NULL));
+    builtin_function_or_method_cls->giveAttr(
+        "__doc__",
+        new BoxedMemberDescriptor(BoxedMemberDescriptor::OBJECT, offsetof(BoxedBuiltinFunctionOrMethod, doc), false));
     builtin_function_or_method_cls->freeze();
 
     instancemethod_cls->giveAttr(
@@ -2021,16 +2049,15 @@ void setupRuntime() {
     TRACK_ALLOCATIONS = true;
 }
 
-BoxedModule* createModule(const std::string& name, const std::string& fn) {
+BoxedModule* createModule(const std::string& name, const std::string& fn, const char* doc) {
     assert(fn.size() && "probably wanted to set the fn to <stdin>?");
-    BoxedModule* module = new BoxedModule(name, fn);
+    BoxedModule* module = new BoxedModule(name, fn, doc);
 
     BoxedDict* d = getSysModulesDict();
     Box* b_name = boxStringPtr(&name);
     ASSERT(d->d.count(b_name) == 0, "%s", name.c_str());
     d->d[b_name] = module;
 
-    module->giveAttr("__doc__", None);
     return module;
 }
 

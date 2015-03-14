@@ -708,7 +708,6 @@ Box* ASTInterpreter::createFunction(AST* node, AST_arguments* args, const std::v
         }
         assert(closure);
     }
-
     return boxCLFunction(cl, closure, is_generator, u.il);
 }
 

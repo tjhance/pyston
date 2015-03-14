@@ -81,6 +81,7 @@ static const std::string iter_str("__iter__");
 static const std::string new_str("__new__");
 static const std::string none_str("None");
 static const std::string repr_str("__repr__");
+static const std::string setattr_str("__setattr__");
 static const std::string setitem_str("__setitem__");
 static const std::string set_str("__set__");
 static const std::string str_str("__str__");
@@ -179,6 +180,7 @@ extern "C" bool softspace(Box* b, bool newval) {
     }
 
     bool r;
+    Box* gotten = NULL;
     try {
         Box* gotten = getattrInternal(b, "softspace", NULL);
         if (!gotten) {
@@ -186,7 +188,12 @@ extern "C" bool softspace(Box* b, bool newval) {
         } else {
             r = nonzero(gotten);
         }
-        setattrInternal(b, "softspace", boxInt(newval), NULL);
+    } catch (ExcInfo e) {
+        r = 0;
+    }
+
+    try {
+        setattr(b, "softspace", boxInt(newval));
     } catch (ExcInfo e) {
         r = 0;
     }
@@ -468,7 +475,7 @@ const char* getNameOfClass(BoxedClass* cls) {
 }
 
 HiddenClass* HiddenClass::getOrMakeChild(const std::string& attr) {
-    std::unordered_map<std::string, HiddenClass*>::iterator it = children.find(attr);
+    auto it = children.find(attr);
     if (it != children.end())
         return it->second;
 
@@ -491,9 +498,9 @@ HiddenClass* HiddenClass::delAttrToMakeHC(const std::string& attr) {
     std::vector<std::string> new_attrs(attr_offsets.size() - 1);
     for (auto it = attr_offsets.begin(); it != attr_offsets.end(); ++it) {
         if (it->second < idx)
-            new_attrs[it->second] = it->first;
+            new_attrs[it->second] = it->first();
         else if (it->second > idx) {
-            new_attrs[it->second - 1] = it->first;
+            new_attrs[it->second - 1] = it->first();
         }
     }
 
@@ -646,7 +653,7 @@ void Box::setattr(const std::string& attr, Box* val, SetattrRewriteArgs* rewrite
         assert(new_hcls->attr_offsets[attr] == numattrs);
 #ifndef NDEBUG
         for (const auto& p : hcls->attr_offsets) {
-            assert(new_hcls->attr_offsets[p.first] == p.second);
+            assert(new_hcls->attr_offsets[p.first()] == p.second);
         }
 #endif
 
@@ -1637,9 +1644,10 @@ bool dataDescriptorSetSpecialCases(Box* obj, Box* val, Box* descr, SetattrRewrit
     return false;
 }
 
-void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
+void setattrGeneric(Box* obj, const std::string& attr, Box* val, SetattrRewriteArgs* rewrite_args) {
     assert(gc::isValidGCObject(val));
 
+    // TODO this should be in type_setattro
     if (obj->cls == type_cls) {
         BoxedClass* cobj = static_cast<BoxedClass*>(obj);
         if (!isUserDefined(cobj)) {
@@ -1711,9 +1719,11 @@ void setattrInternal(Box* obj, const std::string& attr, Box* val, SetattrRewrite
     } else {
         if (!obj->cls->instancesHaveHCAttrs() && !obj->cls->instancesHaveDictAttrs())
             raiseAttributeError(obj, attr.c_str());
+
         obj->setattr(attr, val, rewrite_args);
     }
 
+    // TODO this should be in type_setattro
     if (isSubclass(obj->cls, type_cls)) {
         BoxedClass* self = static_cast<BoxedClass*>(obj);
 
@@ -1743,19 +1753,64 @@ extern "C" void setattr(Box* obj, const char* attr, Box* attr_val) {
     static StatCounter slowpath_setattr("slowpath_setattr");
     slowpath_setattr.log();
 
+    if (obj->cls->tp_setattr) {
+        int rtn = obj->cls->tp_setattr(obj, const_cast<char*>(attr), attr_val);
+        if (rtn)
+            throwCAPIException();
+        return;
+    }
+
     std::unique_ptr<Rewriter> rewriter(
         Rewriter::createRewriter(__builtin_extract_return_addr(__builtin_return_address(0)), 3, "setattr"));
 
     if (rewriter.get()) {
         // rewriter->trap();
-        SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
-        setattrInternal(obj, attr, attr_val, &rewrite_args);
+        rewriter->getArg(0)->getAttr(offsetof(Box, cls))->addAttrGuard(offsetof(BoxedClass, tp_setattr), 0);
+    }
+
+    Box* setattr;
+    RewriterVar* r_setattr;
+    if (rewriter.get()) {
+        GetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0)->getAttr(offsetof(Box, cls)),
+                                        Location::any());
+        setattr = typeLookup(obj->cls, setattr_str, &rewrite_args);
+
         if (rewrite_args.out_success) {
-            rewriter->commit();
+            r_setattr = rewrite_args.out_rtn;
+            // TODO this is not good enough, since the object could get collected:
+            r_setattr->addGuard((intptr_t)setattr);
+        } else {
+            rewriter.reset(NULL);
         }
     } else {
-        setattrInternal(obj, attr, attr_val, NULL);
+        setattr = typeLookup(obj->cls, setattr_str, NULL);
     }
+    assert(setattr);
+
+    // We should probably add this as a GC root, but we can cheat a little bit since
+    // we know it's not going to get deallocated:
+    static Box* object_setattr = object_cls->getattr("__setattr__");
+    assert(object_setattr);
+
+    // I guess this check makes it ok for us to just rely on having guarded on the value of setattr without
+    // invalidating on deallocation, since we assume that object.__setattr__ will never get deallocated.
+    if (setattr == object_setattr) {
+        if (rewriter.get()) {
+            // rewriter->trap();
+            SetattrRewriteArgs rewrite_args(rewriter.get(), rewriter->getArg(0), rewriter->getArg(2));
+            setattrGeneric(obj, attr, attr_val, &rewrite_args);
+            if (rewrite_args.out_success) {
+                rewriter->commit();
+            }
+        } else {
+            setattrGeneric(obj, attr, attr_val, NULL);
+        }
+        return;
+    }
+
+    setattr = processDescriptor(setattr, obj, obj->cls);
+    Box* boxstr = boxString(attr);
+    runtimeCallInternal(setattr, NULL, ArgPassSpec(2), boxstr, attr_val, NULL, NULL, NULL);
 }
 
 bool isUserDefined(BoxedClass* cls) {
@@ -2395,16 +2450,28 @@ static inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** ar
     return args[idx - 3];
 }
 
+static StatCounter slowpath_pickversion("slowpath_pickversion");
 static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oarg1, Box* oarg2, Box* oarg3,
                                      Box** oargs) {
     LOCK_REGION(codegen_rwlock.asWrite());
 
-    CompiledFunction* chosen_cf = NULL;
+    if (f->always_use_version)
+        return f->always_use_version;
+    slowpath_pickversion.log();
+
     for (CompiledFunction* cf : f->versions) {
         assert(cf->spec->arg_types.size() == num_output_args);
 
-        if (cf->spec->rtn_type->llvmType() != UNKNOWN->llvmType())
+        if (!cf->spec->boxed_return_value)
             continue;
+
+        if (cf->spec->accepts_all_inputs) {
+            if (cf == f->versions[0] && cf->effort == EffortLevel::MAXIMAL)
+                f->always_use_version = cf;
+            return cf;
+        }
+
+        assert(cf->spec->rtn_type->llvmType() == UNKNOWN->llvmType());
 
         bool works = true;
         for (int i = 0; i < num_output_args; i++) {
@@ -2420,38 +2487,33 @@ static CompiledFunction* pickVersion(CLFunction* f, int num_output_args, Box* oa
         if (!works)
             continue;
 
-        chosen_cf = cf;
-        break;
+        return cf;
     }
 
-    if (chosen_cf == NULL) {
-        if (f->source == NULL) {
-            // TODO I don't think this should be happening any more?
-            printf("Error: couldn't find suitable function version and no source to recompile!\n");
-            printf("(First version: %p)\n", f->versions[0]->code);
-            abort();
-        }
-
-        EffortLevel new_effort = initialEffort();
-
-        std::vector<ConcreteCompilerType*> arg_types;
-        for (int i = 0; i < num_output_args; i++) {
-            if (new_effort == EffortLevel::INTERPRETED) {
-                arg_types.push_back(UNKNOWN);
-            } else {
-                Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
-                assert(arg); // only builtin functions can pass NULL args
-
-                arg_types.push_back(typeFromClass(arg->cls));
-            }
-        }
-        FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
-
-        // this also pushes the new CompiledVersion to the back of the version list:
-        chosen_cf = compileFunction(f, spec, new_effort, NULL);
+    if (f->source == NULL) {
+        // TODO I don't think this should be happening any more?
+        printf("Error: couldn't find suitable function version and no source to recompile!\n");
+        printf("(First version: %p)\n", f->versions[0]->code);
+        abort();
     }
 
-    return chosen_cf;
+    EffortLevel new_effort = initialEffort();
+
+    std::vector<ConcreteCompilerType*> arg_types;
+    for (int i = 0; i < num_output_args; i++) {
+        if (new_effort == EffortLevel::INTERPRETED) {
+            arg_types.push_back(UNKNOWN);
+        } else {
+            Box* arg = getArg(i, oarg1, oarg2, oarg3, oargs);
+            assert(arg); // only builtin functions can pass NULL args
+
+            arg_types.push_back(typeFromClass(arg->cls));
+        }
+    }
+    FunctionSpecialization* spec = new FunctionSpecialization(UNKNOWN, arg_types);
+
+    // this also pushes the new CompiledVersion to the back of the version list:
+    return compileFunction(f, spec, new_effort, NULL);
 }
 
 static std::string getFunctionName(CLFunction* f) {
@@ -2502,6 +2564,8 @@ static KeywordDest placeKeyword(const ParamNames& param_names, llvm::SmallVector
     }
 }
 
+static StatCounter slowpath_callfunc("slowpath_callfunc");
+static StatCounter slowpath_callfunc_slowpath("slowpath_callfunc_slowpath");
 Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpec argspec, Box* arg1, Box* arg2,
               Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
 
@@ -2513,16 +2577,13 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
      * - error about missing parameters
      */
 
-    static StatCounter slowpath_resolveclfunc("slowpath_callfunc");
-    slowpath_resolveclfunc.log();
-
+    BoxedClosure* closure = func->closure;
     CLFunction* f = func->f;
-    FunctionList& versions = f->versions;
+
+    slowpath_callfunc.log();
 
     int num_output_args = f->numReceivedArgs();
     int num_passed_args = argspec.totalPassed();
-
-    BoxedClosure* closure = func->closure;
 
     if (argspec.has_starargs || argspec.has_kwargs || func->isGenerator) {
         rewrite_args = NULL;
@@ -2555,6 +2616,16 @@ Box* callFunc(BoxedFunctionBase* func, CallRewriteArgs* rewrite_args, ArgPassSpe
             rewrite_args->rewriter->addDependenceOn(func->dependent_ics);
         }
     }
+
+    // Fast path: if it's a simple-enough call, we don't have to do anything special.  On a simple
+    // django-admin test this covers something like 93% of all calls to callFunc.
+    if (!func->isGenerator) {
+        if (argspec.num_keywords == 0 && !argspec.has_starargs && !argspec.has_kwargs && argspec.num_args == f->num_args
+            && !f->takes_varargs && !f->takes_kwargs) {
+            return callCLFunc(f, rewrite_args, argspec.num_args, closure, NULL, arg1, arg2, arg3, args);
+        }
+    }
+    slowpath_callfunc_slowpath.log();
 
     if (rewrite_args) {
         // We might have trouble if we have more output args than input args,
@@ -2906,6 +2977,12 @@ Box* runtimeCallInternal(Box* obj, CallRewriteArgs* rewrite_args, ArgPassSpec ar
         // Some functions are sufficiently important that we want them to be able to patchpoint themselves;
         // they can do this by setting the "internal_callable" field:
         CLFunction::InternalCallable callable = f->f->internal_callable;
+        if (rewrite_args && !rewrite_args->func_guarded) {
+            rewrite_args->obj->addGuard((intptr_t)f);
+            rewrite_args->func_guarded = true;
+            rewrite_args->rewriter->addDependenceOn(f->dependent_ics);
+        }
+
         if (callable == NULL) {
             callable = callFunc;
         }
@@ -3763,6 +3840,9 @@ Box* typeCallInternal(BoxedFunctionBase* f, CallRewriteArgs* rewrite_args, ArgPa
                       Box* arg3, Box** args, const std::vector<const std::string*>* keyword_names) {
     int npassed_args = argspec.totalPassed();
 
+    if (rewrite_args)
+        assert(rewrite_args->func_guarded);
+
     static StatCounter slowpath_typecall("slowpath_typecall");
     slowpath_typecall.log();
 
@@ -4196,10 +4276,10 @@ extern "C" Box* importStar(Box* _from_module, BoxedModule* to_module) {
 
     HCAttrs* module_attrs = from_module->getHCAttrsPtr();
     for (auto& p : module_attrs->hcls->attr_offsets) {
-        if (p.first[0] == '_')
+        if (p.first()[0] == '_')
             continue;
 
-        to_module->setattr(p.first, module_attrs->attr_list->attrs[p.second], NULL);
+        to_module->setattr(p.first(), module_attrs->attr_list->attrs[p.second], NULL);
     }
 
     return None;

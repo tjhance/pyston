@@ -627,6 +627,7 @@ extern "C" Box* import(int level, Box* from_imports, const std::string* module_n
 }
 
 Box* impFindModule(Box* _name, BoxedList* path) {
+    _name = coerceUnicodeToStr(_name);
     RELEASE_ASSERT(_name->cls == str_cls, "");
 
     BoxedString* name = static_cast<BoxedString*>(_name);
@@ -684,7 +685,9 @@ Box* impLoadModule(Box* _name, Box* _file, Box* _pathname, Box** args) {
 }
 
 void setupImport() {
-    BoxedModule* imp_module = createModule("imp", "__builtin__");
+    BoxedModule* imp_module
+        = createModule("imp", "__builtin__", "'This module provides the components needed to build your own\n"
+                                             "__import__ function.  Undocumented functions are obsolete.'");
 
     imp_module->giveAttr("PY_SOURCE", boxInt(SearchResult::PY_SOURCE));
     imp_module->giveAttr("PY_COMPILED", boxInt(SearchResult::PY_COMPILED));

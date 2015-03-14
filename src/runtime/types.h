@@ -15,6 +15,7 @@
 #ifndef PYSTON_RUNTIME_TYPES_H
 #define PYSTON_RUNTIME_TYPES_H
 
+#include <llvm/ADT/StringMap.h>
 #include <ucontext.h>
 
 #include "Python.h"
@@ -255,7 +256,11 @@ static_assert(sizeof(pyston::BoxedHeapClass) == sizeof(PyHeapTypeObject), "");
 class HiddenClass : public GCAllocated<gc::GCKind::HIDDEN_CLASS> {
 private:
     HiddenClass() {}
-    HiddenClass(const HiddenClass* parent) : attr_offsets(parent->attr_offsets) {}
+    HiddenClass(HiddenClass* parent) : attr_offsets() {
+        for (auto& p : parent->attr_offsets) {
+            this->attr_offsets.insert(&p);
+        }
+    }
 
 public:
     static HiddenClass* makeRoot() {
@@ -267,8 +272,8 @@ public:
         return new HiddenClass();
     }
 
-    std::unordered_map<std::string, int> attr_offsets;
-    std::unordered_map<std::string, HiddenClass*> children;
+    llvm::StringMap<int> attr_offsets;
+    llvm::StringMap<HiddenClass*> children;
 
     HiddenClass* getOrMakeChild(const std::string& attr);
 
@@ -442,6 +447,7 @@ public:
     // Accessed via member descriptor
     Box* modname;      // __module__
     BoxedString* name; // __name__ (should be here or in one of the derived classes?)
+    Box* doc;          // __doc__
 
     BoxedFunctionBase(CLFunction* f);
     BoxedFunctionBase(CLFunction* f, std::initializer_list<Box*> defaults, BoxedClosure* closure = NULL,
@@ -461,9 +467,9 @@ public:
 
 class BoxedBuiltinFunctionOrMethod : public BoxedFunctionBase {
 public:
-    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name);
+    BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, const char* doc = NULL);
     BoxedBuiltinFunctionOrMethod(CLFunction* f, const char* name, std::initializer_list<Box*> defaults,
-                                 BoxedClosure* closure = NULL, bool isGenerator = false);
+                                 BoxedClosure* closure = NULL, bool isGenerator = false, const char* doc = NULL);
 
     DEFAULT_CLASS(builtin_function_or_method_cls);
 };
@@ -476,7 +482,7 @@ public:
     std::string fn;
     FutureFlags future_flags;
 
-    BoxedModule(const std::string& name, const std::string& fn);
+    BoxedModule(const std::string& name, const std::string& fn, const char* doc = NULL);
     std::string name();
 
     DEFAULT_CLASS(module_cls);
@@ -603,6 +609,7 @@ public:
 extern "C" void boxGCHandler(GCVisitor* v, Box* b);
 
 Box* objectNewNoArgs(BoxedClass* cls);
+Box* objectSetattr(Box* obj, Box* attr, Box* value);
 
 Box* makeAttrWrapper(Box* b);
 
