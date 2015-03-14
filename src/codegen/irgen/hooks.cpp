@@ -490,9 +490,9 @@ CompiledFunction* compilePartialFuncInternal(OSRExit* exit) {
     assert(exit->parent_cf->clfunc);
     CompiledFunction*& new_cf = exit->parent_cf->clfunc->osr_versions[exit->entry];
     if (new_cf == NULL) {
-        EffortLevel new_effort = EffortLevel::MAXIMAL;
-        if (exit->parent_cf->effort == EffortLevel::INTERPRETED)
-            new_effort = EffortLevel::MINIMAL;
+        EffortLevel new_effort =
+            exit->parent_cf->effort == EffortLevel::INTERPRETED ? EffortLevel::MINIMAL
+            : EffortLevel::MAXIMAL;
         CompiledFunction* compiled = compileFunction(exit->parent_cf->clfunc, NULL, new_effort, exit->entry);
         assert(compiled == new_cf);
 
