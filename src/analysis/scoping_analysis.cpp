@@ -184,16 +184,22 @@ struct ScopingAnalysis::ScopeNameUsage {
     }
 };
 
+enum class NameLookupRule {
+    USE_NAME_ALWAYS,
+    USE_NAME_FOR_FREE_VARS,
+    USE_NAME_NEVER
+};
+
 class ScopeInfoBase : public ScopeInfo {
 private:
     ScopeInfo* parent;
     ScopingAnalysis::ScopeNameUsage* usage;
     AST* ast;
-    bool usesNameLookup_;
+    NameLookupRule nameLookupRule;
 
 public:
-    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, bool usesNameLookup)
-        : parent(parent), usage(usage), ast(ast), usesNameLookup_(usesNameLookup) {
+    ScopeInfoBase(ScopeInfo* parent, ScopingAnalysis::ScopeNameUsage* usage, AST* ast, NameLookupRule nameLookupRule)
+        : parent(parent), usage(usage), ast(ast), nameLookupRule(nameLookupRule) {
         assert(usage);
         assert(ast);
     }
@@ -217,7 +223,7 @@ public:
 
         if (usage->forced_globals.count(name))
             return true;
-        if (usesNameLookup_)
+        if (nameLookupRule != NameLookupRule::USE_NAME_NEVER)
             return false;
         return usage->written.count(name) == 0 && usage->got_from_closure.count(name) == 0;
     }
@@ -229,7 +235,7 @@ public:
     }
     bool saveInClosure(InternedString name) {
         // HAX
-        if (isCompilerCreatedName(name) || usesNameLookup_)
+        if (isCompilerCreatedName(name) || nameLookupRule != NameLookupRule::USE_NAME_NEVER)
             return false;
         return usage->referenced_from_nested.count(name) != 0;
     }
@@ -244,12 +250,16 @@ public:
             return VarScopeType::GLOBAL;
         if (saveInClosure(name))
             return VarScopeType::CLOSURE;
-        if (usesNameLookup_)
+
+        if (nameLookupRule == NameLookupRule::USE_NAME_ALWAYS)
             return VarScopeType::NAME;
-        return VarScopeType::FAST;
+        else if (nameLookupRule == NameLookupRule::USE_NAME_FOR_FREE_VARS)
+            return usage->written.count(name) > 0 ? VarScopeType::FAST : VarScopeType::NAME;
+        else
+            return VarScopeType::FAST;
     }
 
-    bool usesNameLookup() override { return usesNameLookup_; }
+    bool usesNameLookup() override { return nameLookupRule != NameLookupRule::USE_NAME_NEVER; }
 
     bool isPassedToViaClosure(InternedString name) override {
         if (isCompilerCreatedName(name))
@@ -661,7 +671,7 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::Suite:
             case AST_TYPE::ClassDef: {
                 ScopeInfoBase* scopeInfo
-                    = new ScopeInfoBase(parent_info, usage, usage->node, true /* usesNameLookup */);
+                    = new ScopeInfoBase(parent_info, usage, usage->node, NameLookupRule::USE_NAME_ALWAYS);
                 this->scopes[node] = scopeInfo;
                 break;
             }
@@ -671,7 +681,8 @@ void ScopingAnalysis::processNameUsages(ScopingAnalysis::NameUsageMap* usages) {
             case AST_TYPE::DictComp:
             case AST_TYPE::SetComp: {
                 ScopeInfoBase* scopeInfo = new ScopeInfoBase(parent_info, usage, usage->node,
-                                                             usage->hasNameForcingSyntax() /* usesNameLookup */);
+                                             usage->hasNameForcingSyntax() ?
+                                             NameLookupRule::USE_NAME_FOR_FREE_VARS : NameLookupRule::USE_NAME_NEVER);
                 this->scopes[node] = scopeInfo;
                 break;
             }

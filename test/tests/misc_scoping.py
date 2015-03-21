@@ -53,9 +53,9 @@ def f():
     print eval("meh(locals()) + a")
 f()
 
-def f():
-    print eval("meh(locals()) + a", globals(), {})
-f()
+#def f():
+#    print eval("meh(locals()) + a", globals(), {})
+#f()
 
 def f():
     d = locals()
@@ -67,6 +67,14 @@ f()
 
 def f():
     exec "print 'hi'"
+    d = locals()
+    a = 2
+    d['a'] = 3
+    print a
+    print d
+f()
+
+class C(object):
     d = locals()
     a = 2
     d['a'] = 3

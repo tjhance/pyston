@@ -888,7 +888,25 @@ Value ASTInterpreter::visit_exec(AST_Exec* node) {
     Box* code = visit_expr(node->body).o;
     exec(code);
 
+    boxedLocalsToFast();
+
     return Value();
+}
+
+void ASTInterpreter::boxedLocalsToFast() {
+    assert(frame_info->boxedLocals != NULL);
+    RELEASE_ASSERT(frame_info->boxedLocals->cls == dict_cls, "we don't support non-dict locals right now");
+    BoxedDict* d = static_cast<BoxedDict*>(frame_info->boxedLocals);
+    for (InternedString& name : scope_info->allFastNames()) {
+        Box* boxedName = boxString(name.str());
+        auto it = d->d.find(boxedName);
+        if (it != d->d.end()) {
+            sym_table[name] = it->second;
+        } else {
+            // The behaviour is to ignore if the name isn't in the dict (i.e. if the variable is
+            // undefined in boxedLocals, we don't make the FAST version undefined as well)
+        }
+    }
 }
 
 Value ASTInterpreter::visit_compare(AST_Compare* node) {
