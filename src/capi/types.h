@@ -98,6 +98,7 @@ public:
     DEFAULT_CLASS(wrapperdescr_cls);
 
     static Box* __get__(BoxedWrapperDescriptor* self, Box* inst, Box* owner);
+    static Box* __call__(BoxedWrapperDescriptor* descr, PyObject* self, BoxedTuple* args, Box** _args);
 };
 
 class BoxedWrapperObject : public Box {
@@ -119,11 +120,13 @@ public:
         assert(self->descr->wrapper->offset > 0);
 
         Box* rtn;
-        if (flags & PyWrapperFlag_KEYWORDS) {
+        if (flags == PyWrapperFlag_KEYWORDS) {
             wrapperfunc_kwds wk = (wrapperfunc_kwds)wrapper;
             rtn = (*wk)(self->obj, args, self->descr->wrapped, kwds);
-        } else {
+        } else if (flags == 0) {
             rtn = (*wrapper)(self->obj, args, self->descr->wrapped);
+        } else {
+            RELEASE_ASSERT(0, "%d", flags);
         }
 
         checkAndThrowCAPIException();

@@ -190,6 +190,9 @@ public:
     // that we can't rely on for extension classes.
     bool is_pyston_class;
 
+    typedef bool (*pyston_inquiry)(Box*);
+    pyston_inquiry tpp_hasnext;
+
     bool hasGenericGetattr() { return tp_getattr == NULL; }
 
     void freeze();
@@ -204,6 +207,7 @@ protected:
                bool is_user_defined);
 
     friend void setupRuntime();
+    friend void setupSysEnd();
 };
 
 class BoxedHeapClass : public BoxedClass {
@@ -232,6 +236,7 @@ private:
                    bool is_user_defined, BoxedString* name);
 
     friend void setupRuntime();
+    friend void setupSys();
 
     DEFAULT_CLASS(type_cls);
 };

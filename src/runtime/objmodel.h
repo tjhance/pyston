@@ -90,6 +90,7 @@ Box* getiter(Box* o);
 extern "C" Box* getPystonIter(Box* o);
 extern "C" Box* getiterHelper(Box* o);
 extern "C" Box* createBoxedIterWrapperIfNeeded(Box* o);
+extern "C" bool hasnext(Box* o);
 
 extern "C" void dump(void* p);
 
@@ -121,7 +122,7 @@ extern "C" void delattr_internal(Box* obj, const std::string& attr, bool allow_c
 struct CompareRewriteArgs;
 Box* compareInternal(Box* lhs, Box* rhs, int op_type, CompareRewriteArgs* rewrite_args);
 Box* getattrInternal(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args);
-Box* getattrInternalGeneral(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
+Box* getattrInternalGeneric(Box* obj, const std::string& attr, GetattrRewriteArgs* rewrite_args, bool cls_only,
                             bool for_call, Box** bind_obj_out, RewriterVar** r_bind_obj_out);
 
 Box* typeLookup(BoxedClass* cls, const std::string& attr, GetattrRewriteArgs* rewrite_args);
