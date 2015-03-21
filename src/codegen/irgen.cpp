@@ -415,11 +415,18 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_generator_type_ptr->getPointerTo());
                 } else if (p.second == CLOSURE) {
                     ptr = entry_emitter->getBuilder()->CreateBitCast(ptr, g.llvm_closure_type_ptr->getPointerTo());
+                } else if (p.second == FRAME_INFO) {
+                    ptr = entry_emitter->getBuilder()->CreateBitCast(
+                        ptr, g.llvm_frame_info_type->getPointerTo()->getPointerTo());
                 } else {
                     assert(p.second->llvmType() == g.llvm_value_type_ptr);
                 }
                 from_arg = entry_emitter->getBuilder()->CreateLoad(ptr);
                 assert(from_arg->getType() == p.second->llvmType());
+            }
+
+            if (from_arg->getType() == g.llvm_frame_info_type->getPointerTo()) {
+                irstate->setFrameInfoArgument(from_arg);
             }
 
             ConcreteCompilerType* phi_type;
@@ -632,12 +639,16 @@ static void emitBBs(IRGenState* irstate, TypeAnalysis* types, const OSREntryDesc
             if (source->is_generator)
                 names.insert(source->getInternedStrings().get(PASSED_GENERATOR_NAME));
 
-            for (const auto& s : names) {
+            if (entry_descriptor != NULL)
+                names.insert(source->getInternedStrings().get(FRAME_INFO_PTR_NAME));
+
+            for (const InternedString& s : names) {
                 // printf("adding guessed phi for %s\n", s.c_str());
                 ConcreteCompilerType* type = getTypeAtBlockStart(types, s, block);
                 llvm::PHINode* phi
                     = emitter->getBuilder()->CreatePHI(type->llvmType(), block->predecessors.size(), s.str());
                 ConcreteCompilerVariable* var = new ConcreteCompilerVariable(type, phi, true);
+                printf("s is %s\n", s.c_str());
                 generator->giveLocalSymbol(s, var);
 
                 (*phis)[s] = std::make_pair(type, phi);

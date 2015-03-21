@@ -1792,6 +1792,27 @@ public:
 } _GENERATOR;
 ConcreteCompilerType* GENERATOR = &_GENERATOR;
 
+class FrameInfoType : public ConcreteCompilerType {
+public:
+    llvm::Type* llvmType() override { return g.llvm_frame_info_type->getPointerTo(); }
+    std::string debugName() override { return "FrameInfo"; }
+
+    ConcreteCompilerType* getConcreteType() override { return this; }
+    ConcreteCompilerType* getBoxType() override { return FRAME_INFO; }
+
+    void drop(IREmitter& emitter, VAR* var) override {
+        // pass
+    }
+    void grab(IREmitter& emitter, VAR* var) override {
+        // pass
+    }
+
+    Box* deserializeFromFrame(const FrameVals& vals) override {
+        assert(false); // This function shouldn't be called.
+    }
+} _FRAME_INFO;
+ConcreteCompilerType* FRAME_INFO = &_FRAME_INFO;
+
 class StrConstantType : public ValuedCompilerType<const std::string*> {
 public:
     std::string debugName() override { return "str_constant"; }

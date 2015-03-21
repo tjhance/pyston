@@ -72,8 +72,39 @@ llvm::Value* IRGenState::getScratchSpace(int min_bytes) {
     return scratch_space;
 }
 
+static llvm::Value* get_boxed_locals_gep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, exc) == 0, "");
+    static_assert(sizeof(ExcInfo) == 24, "");
+    static_assert(offsetof(FrameInfo, boxedLocals) == 24, "");
+    return builder.CreateConstInBoundsGEP2_32(v, 0, 1);
+}
+
+static llvm::Value* get_excinfo_gep(llvm::IRBuilder<true>& builder, llvm::Value* v) {
+    static_assert(offsetof(FrameInfo, exc) == 0, "");
+    static_assert(offsetof(ExcInfo, type) == 0, "");
+    return builder.CreateConstInBoundsGEP2_32(builder.CreateConstInBoundsGEP2_32(v, 0, 0), 0, 0);
+}
+
 llvm::Value* IRGenState::getFrameInfoVar() {
-    if (!frame_info) {
+    /*
+        There is a matrix of possibilities here.
+
+        For complete (non-OSR) functions, we initialize the FrameInfo* with an alloca and
+        set this->frame_info to that llvm value.
+        - If the function has NAME-scope, we initialize the frame_info.boxedLocals to a dictionary
+          and set this->boxed_locals to an llvm value which is that dictionary.
+        - If it is non-NAME-scope, we leave it NULL, because  most of the time it won't
+          be initialized (unless someone calls locals() or something).
+          this->boxed_locals is unused within the IR, so we don't set it.
+
+        If this is an OSR function, then a FrameInfo* is passed in as an argument, so we don't
+        need to initialize it with an alloca, and frame_info is already
+        pointer.
+        - If the function is NAME-scope, we extract the boxedLocals from the frame_info in order
+          to set this->boxed_locals.
+    */
+
+    if (!this->frame_info) {
         llvm::BasicBlock& entry_block = getLLVMFunction()->getEntryBlock();
 
         llvm::IRBuilder<true> builder(&entry_block);
@@ -82,7 +113,7 @@ llvm::Value* IRGenState::getFrameInfoVar() {
             builder.SetInsertPoint(&entry_block, entry_block.getFirstInsertionPt());
 
 
-        llvm::AllocaInst* al = builder.CreateAlloca(g.frame_info_type, NULL, "frame_info");
+        llvm::AllocaInst* al = builder.CreateAlloca(g.llvm_frame_info_type, NULL, "frame_info");
         assert(al->isStaticAlloca());
 
         if (entry_block.getTerminator())
@@ -90,36 +121,43 @@ llvm::Value* IRGenState::getFrameInfoVar() {
         else
             builder.SetInsertPoint(&entry_block);
 
-        // frame_info.exc.type = NULL
-        static_assert(offsetof(FrameInfo, exc) == 0, "");
-        static_assert(offsetof(ExcInfo, type) == 0, "");
-        llvm::Value* exctype_gep
-            = builder.CreateConstInBoundsGEP2_32(builder.CreateConstInBoundsGEP2_32(al, 0, 0), 0, 0);
-        builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), exctype_gep);
+        if (frame_info_arg) {
+            // The OSR case
 
-        // frame_info.boxedLocals = NULL
-        static_assert(offsetof(FrameInfo, exc) == 0, "");
-        static_assert(sizeof(ExcInfo) == 24, "");
-        static_assert(offsetof(FrameInfo, boxedLocals) == 24, "");
-        llvm::Value* boxed_locals_gep = builder.CreateConstInBoundsGEP2_32(al, 0, 1);
-        builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), boxed_locals_gep);
+            this->frame_info = frame_info_arg;
 
-        if (getScopeInfo()->usesNameLookup()) {
-            // frame_info.boxedLocals = createDict()
-            // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
-            this->boxed_locals = builder.CreateCall(g.funcs.createDict);
-            builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+            if (getScopeInfo()->usesNameLookup()) {
+                // load frame_info.boxedLocals
+                this->boxed_locals = builder.CreateLoad(get_boxed_locals_gep(builder, this->frame_info));
+            }
+        } else {
+            // The "normal" case
+
+            // frame_info.exc.type = NULL
+            builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), get_excinfo_gep(builder, al));
+
+            // frame_info.boxedLocals = NULL
+            llvm::Value* boxed_locals_gep = get_boxed_locals_gep(builder, al);
+            builder.CreateStore(embedConstantPtr(NULL, g.llvm_value_type_ptr), boxed_locals_gep);
+
+            if (getScopeInfo()->usesNameLookup()) {
+                // frame_info.boxedLocals = createDict()
+                // (Since this can call into the GC, we have to initialize it to NULL first as we did above.)
+                this->boxed_locals = builder.CreateCall(g.funcs.createDict);
+                builder.CreateStore(this->boxed_locals, boxed_locals_gep);
+            }
+
+            this->frame_info = al;
         }
-
-        frame_info = al;
     }
 
-    return frame_info;
+    return this->frame_info;
 }
 
 llvm::Value* IRGenState::getBoxedLocalsVar() {
     assert(getScopeInfo()->usesNameLookup());
     getFrameInfoVar(); // ensures this->boxed_locals_var is initialized
+    assert(this->boxed_locals != NULL);
     return this->boxed_locals;
 }
 
@@ -302,6 +340,7 @@ static std::vector<const std::string*>* getKeywordNameStorage(AST_Call* node) {
 const std::string CREATED_CLOSURE_NAME = "#created_closure";
 const std::string PASSED_CLOSURE_NAME = "#passed_closure";
 const std::string PASSED_GENERATOR_NAME = "#passed_generator";
+const std::string FRAME_INFO_PTR_NAME = "#frame_info_ptr";
 
 bool isIsDefinedName(const std::string& name) {
     return startswith(name, "!is_defined_");
@@ -1787,6 +1826,9 @@ private:
 
         SortedSymbolTable sorted_symbol_table(symbol_table.begin(), symbol_table.end());
 
+        sorted_symbol_table[internString(FRAME_INFO_PTR_NAME)]
+            = new ConcreteCompilerVariable(FRAME_INFO, irstate->getFrameInfoVar(), true);
+
         // For OSR calls, we use the same calling convention as in some other places; namely,
         // arg1, arg2, arg3, argarray [nargs is ommitted]
         // It would be nice to directly pass all variables as arguments, instead of packing them into
@@ -1863,6 +1905,9 @@ private:
                     val = emitter.getBuilder()->CreateIntToPtr(val, g.llvm_value_type_ptr);
                 } else if (var->getType() == CLOSURE) {
                     ptr = emitter.getBuilder()->CreateBitCast(ptr, g.llvm_closure_type_ptr->getPointerTo());
+                } else if (var->getType() == FRAME_INFO) {
+                    ptr = emitter.getBuilder()->CreateBitCast(ptr,
+                                                              g.llvm_frame_info_type->getPointerTo()->getPointerTo());
                 } else {
                     assert(val->getType() == g.llvm_value_type_ptr);
                 }
@@ -2052,7 +2097,7 @@ private:
     bool allowableFakeEndingSymbol(InternedString name) {
         // TODO this would be a great place to be able to use interned versions of the static names...
         return isIsDefinedName(name.str()) || name.str() == PASSED_CLOSURE_NAME || name.str() == CREATED_CLOSURE_NAME
-               || name.str() == PASSED_GENERATOR_NAME;
+               || name.str() == PASSED_GENERATOR_NAME || name.str() == FRAME_INFO_PTR_NAME;
     }
 
     void endBlock(State new_state) {
@@ -2063,7 +2108,7 @@ private:
         SourceInfo* source = irstate->getSourceInfo();
         ScopeInfo* scope_info = irstate->getScopeInfo();
 
-        // Additional names to remove; remove them after iteration is done to new mess up the iterators
+        // Additional names to remove; remove them after iteration is done to not mess up the iterators
         std::vector<InternedString> also_remove;
         for (SymbolTable::iterator it = symbol_table.begin(); it != symbol_table.end();) {
             if (allowableFakeEndingSymbol(it->first)) {
@@ -2226,6 +2271,8 @@ public:
                     ending_type = getCreatedClosureType();
                 } else if (it->first.str() == PASSED_GENERATOR_NAME) {
                     ending_type = GENERATOR;
+                } else if (it->first.str() == FRAME_INFO_PTR_NAME) {
+                    ending_type = FRAME_INFO;
                 } else {
                     ending_type = types->getTypeAtBlockEnd(it->first, myblock);
                 }

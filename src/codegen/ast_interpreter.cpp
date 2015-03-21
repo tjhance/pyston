@@ -463,6 +463,8 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
             if (created_closure)
                 sorted_symbol_table[source_info->getInternedStrings().get(CREATED_CLOSURE_NAME)] = created_closure;
 
+            sorted_symbol_table[source_info->getInternedStrings().get(FRAME_INFO_PTR_NAME)] = (Box*)&frame_info;
+
             if (found_entry == nullptr) {
                 OSREntryDescriptor* entry = OSREntryDescriptor::create(compiled_func, node);
 
@@ -473,6 +475,8 @@ Value ASTInterpreter::visit_jump(AST_Jump* node) {
                         entry->args[it.first] = GENERATOR;
                     else if (it.first.str() == PASSED_CLOSURE_NAME || it.first.str() == CREATED_CLOSURE_NAME)
                         entry->args[it.first] = CLOSURE;
+                    else if (it.first.str() == FRAME_INFO_PTR_NAME)
+                        entry->args[it.first] = FRAME_INFO;
                     else {
                         assert(it.first.str()[0] != '!');
                         entry->args[it.first] = UNKNOWN;
