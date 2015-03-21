@@ -1838,7 +1838,7 @@ public:
     }
 
     Box* deserializeFromFrame(const FrameVals& vals) override {
-        assert(false); // This function shouldn't be called.
+        RELEASE_ASSERT(false, "should not be called"); // This function shouldn't be called.
     }
 } _FRAME_INFO;
 ConcreteCompilerType* FRAME_INFO = &_FRAME_INFO;

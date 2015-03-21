@@ -1,3 +1,4 @@
+# skip-if: True
 import gc
 import threading
 
