@@ -957,7 +957,17 @@ void Rewriter::commit() {
 // Make sure that we have been calling bumpUse correctly.
 // All uses should have been accounted for, other than the live outs
 #ifndef NDEBUG
-    for (RewriterVar* var : vars) {
+    for (int i = 0; i < std::min(nvars, VAR_BLOCK_SIZE); i++) {
+        RewriterVar* var = &_var_block[i];
+        int num_as_live_out = 0;
+        for (RewriterVar* live_out : live_outs) {
+            if (live_out == var) {
+                num_as_live_out++;
+            }
+        }
+        assert(var->next_use + num_as_live_out == var->uses.size());
+    }
+    for (RewriterVar* var : more_vars) {
         int num_as_live_out = 0;
         for (RewriterVar* live_out : live_outs) {
             if (live_out == var) {
@@ -1436,8 +1446,16 @@ void Rewriter::removeLocationFromVar(RewriterVar* var, Location l) {
 RewriterVar* Rewriter::createNewVar() {
     assertPhaseCollecting();
 
-    RewriterVar* var = new RewriterVar(this);
-    vars.push_back(var);
+    RewriterVar* var;
+    if (nvars < VAR_BLOCK_SIZE) {
+        _var_block[nvars] = RewriterVar(this);
+        var = &_var_block[nvars];
+    } else {
+        var = new RewriterVar(this);
+        more_vars.push_back(var);
+    }
+    nvars++;
+
     return var;
 }
 
@@ -1495,7 +1513,8 @@ TypeRecorder* Rewriter::getTypeRecorder() {
 }
 
 Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>& live_outs)
-    : rewrite(rewrite),
+    : nvars(0),
+      rewrite(rewrite),
       assembler(rewrite->getAssembler()),
       const_loader(this),
       return_location(rewrite->returnRegister()),
@@ -1505,9 +1524,6 @@ Rewriter::Rewriter(ICSlotRewrite* rewrite, int num_args, const std::vector<int>&
       done_guarding(false) {
     initPhaseCollecting();
 
-#ifndef NDEBUG
-    start_vars = RewriterVar::nvars;
-#endif
     finished = false;
 
     for (int i = 0; i < num_args; i++) {

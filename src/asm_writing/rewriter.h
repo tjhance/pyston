@@ -263,7 +263,7 @@ private:
     void dump();
 
     RewriterVar(const RewriterVar&) = delete;
-    RewriterVar& operator=(const RewriterVar&) = delete;
+    // RewriterVar& operator=(const RewriterVar&) = delete;
 
 public:
 #ifndef NDEBUG
@@ -276,6 +276,8 @@ public:
 #endif
         assert(rewriter);
     }
+
+    RewriterVar() {}
 
 #ifndef NDEBUG
     ~RewriterVar() { nvars--; }
@@ -296,8 +298,14 @@ enum class ActionType { NORMAL, GUARD, MUTATION };
 // non-NULL fake pointer, definitely legit
 #define LOCATION_PLACEHOLDER ((RewriterVar*)1)
 
+#define VAR_BLOCK_SIZE 20
+
 class Rewriter : public ICSlotRewrite::CommitHook {
 private:
+    RewriterVar _var_block[VAR_BLOCK_SIZE];
+    int nvars;
+    llvm::SmallVector<RewriterVar*, 8> more_vars;
+
     // Helps generating the best code for loading a const integer value.
     // By keeping track of the last known value of every register and reusing it.
     class ConstLoader {
@@ -328,7 +336,6 @@ private:
     std::unique_ptr<ICSlotRewrite> rewrite;
     assembler::Assembler* assembler;
     ConstLoader const_loader;
-    std::vector<RewriterVar*> vars;
 
     const Location return_location;
 
@@ -431,7 +438,13 @@ private:
 
     void assertConsistent() {
 #ifndef NDEBUG
-        for (RewriterVar* var : vars) {
+        for (int i = 0; i < std::min(nvars, VAR_BLOCK_SIZE); i++) {
+            RewriterVar* var = &_var_block[i];
+            for (Location l : var->locations) {
+                assert(vars_by_location[l] == var);
+            }
+        }
+        for (RewriterVar* var : more_vars) {
             for (Location l : var->locations) {
                 assert(vars_by_location[l] == var);
             }
@@ -439,7 +452,6 @@ private:
         for (std::pair<Location, RewriterVar*> p : vars_by_location.getAsMap()) {
             assert(p.second != NULL);
             if (p.second != LOCATION_PLACEHOLDER) {
-                assert(std::find(vars.begin(), vars.end(), p.second) != vars.end());
                 assert(p.second->locations.count(p.first) == 1);
             }
         }
@@ -455,15 +467,11 @@ public:
             this->abort();
         assert(finished);
 
-        for (RewriterVar* var : vars) {
+        for (RewriterVar* var : more_vars) {
             delete var;
         }
-
-        // This check isn't thread safe and should be fine to remove if it causes
-        // issues (along with the nvars/start_vars accounting)
-        ASSERT(threading::threadWasStarted() || RewriterVar::nvars == start_vars, "%d %d", RewriterVar::nvars,
-               start_vars);
     }
+
 
     Location getReturnDestination();
 
