@@ -803,6 +803,8 @@ void Assembler::lea(Indirect mem, Register reg) {
         reg_idx -= 8;
     }
 
+    bool needssib = (mem_idx == 0b100);
+
     assert(mem_idx >= 0 && mem_idx < 8);
     assert(reg_idx >= 0 && reg_idx < 8);
 
@@ -811,12 +813,18 @@ void Assembler::lea(Indirect mem, Register reg) {
 
     if (mem.offset == 0) {
         emitModRM(0b00, reg_idx, mem_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
     } else if (-0x80 <= mem.offset && mem.offset < 0x80) {
         emitModRM(0b01, reg_idx, mem_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
         emitByte(mem.offset);
     } else {
         assert((-1L << 31) <= mem.offset && mem.offset < (1L << 31) - 1);
         emitModRM(0b10, reg_idx, mem_idx);
+        if (needssib)
+            emitSIB(0b00, 0b100, mem_idx);
         emitInt(mem.offset, 4);
     }
 }
