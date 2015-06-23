@@ -965,6 +965,24 @@ void RewriterVar::releaseIfNoUses() {
     }
 }
 
+// 1 ok
+// 1000 ok
+// 10000 fail
+// 6000 fail
+// 3000 ok
+// 4500 ok
+// 5200 fail
+// 4700 fail
+// 4600 fail
+// 4550 fail
+// 4525 fail
+// 4512 fail
+// 4506 ok
+// 4509 ok
+// 4510 fail
+int rcounter = 0;
+int MAXR = 4510;
+
 void Rewriter::commit() {
     assert(!finished);
     initPhaseEmitting();
@@ -989,6 +1007,18 @@ void Rewriter::commit() {
     };
 
     if (assembler->hasFailed()) {
+        on_assemblyfail();
+        return;
+    }
+
+    rcounter++;
+    bool print_asm = false;
+    if (rcounter == MAXR - 1) {
+        print_asm = true;
+        assembler->trap();
+        //assert(false);
+    }
+    if (rcounter >= MAXR) {
         on_assemblyfail();
         return;
     }
@@ -1199,7 +1229,7 @@ void Rewriter::commit() {
     finished = true;
 
 #ifndef NDEBUG
-    if (ASSEMBLY_LOGGING) {
+    if (ASSEMBLY_LOGGING && print_asm) {
         fprintf(stderr, "%s\n\n", asm_dump.c_str());
     }
 #endif

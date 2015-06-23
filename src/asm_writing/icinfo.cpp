@@ -98,6 +98,8 @@ void ICSlotRewrite::commit(CommitHook* hook) {
     uint8_t* slot_start = (uint8_t*)ic->start_addr + ic_entry->idx * ic->getSlotSize();
     uint8_t* continue_point = (uint8_t*)ic->continue_addr;
 
+    printf("continue_point = %p\n", continue_point);
+
     bool do_commit = hook->finishAssembly(ic_entry, continue_point - slot_start);
 
     if (!do_commit)
