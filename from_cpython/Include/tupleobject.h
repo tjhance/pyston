@@ -33,8 +33,8 @@ typedef struct {
 } PyTupleObject;
 
 // Pyston change: this is no longer a static object
-PyAPI_DATA(PyTypeObject*) tuple_cls;
-#define PyTuple_Type (*tuple_cls)
+PyAPI_DATA(PyTypeObject) _tuple_cls;
+#define PyTuple_Type (_tuple_cls)
 
 #define PyTuple_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TUPLE_SUBCLASS)

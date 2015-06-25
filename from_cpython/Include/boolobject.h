@@ -15,8 +15,8 @@ struct _PyBoolObject;
 typedef struct _PyBoolObject PyBoolObject;
 
 // Pyston change: this is no longer a static object
-PyAPI_DATA(PyTypeObject*) bool_cls;
-#define PyBool_Type (*bool_cls)
+PyAPI_DATA(PyTypeObject) _bool_cls;
+#define PyBool_Type (_bool_cls)
 
 #define PyBool_Check(x) (Py_TYPE(x) == &PyBool_Type)
 

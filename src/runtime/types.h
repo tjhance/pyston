@@ -84,13 +84,47 @@ BoxedList* getSysPath();
 extern "C" Box* getSysStdout();
 
 extern "C" {
-extern BoxedClass* object_cls, *type_cls, *bool_cls, *int_cls, *long_cls, *float_cls, *str_cls, *function_cls,
-    *none_cls, *instancemethod_cls, *list_cls, *slice_cls, *module_cls, *dict_cls, *tuple_cls, *file_cls,
-    *enumerate_cls, *xrange_cls, *member_descriptor_cls, *method_cls, *closure_cls, *generator_cls, *complex_cls,
-    *basestring_cls, *property_cls, *staticmethod_cls, *classmethod_cls, *attrwrapper_cls, *pyston_getset_cls,
-    *capi_getset_cls, *builtin_function_or_method_cls, *set_cls, *frozenset_cls, *code_cls, *frame_cls, *capifunc_cls,
-    *wrapperdescr_cls, *wrapperobject_cls;
+extern BoxedClass _object_cls, _type_cls, _bool_cls, _int_cls, _long_cls, _float_cls, _str_cls, _function_cls,
+    _none_cls, _instancemethod_cls, _list_cls, _slice_cls, _module_cls, _dict_cls, _tuple_cls, _file_cls,
+    *enumerate_cls, *xrange_cls, _member_descriptor_cls, _method_cls, _closure_cls, *generator_cls, _complex_cls,
+    _basestring_cls, _property_cls, _staticmethod_cls, _classmethod_cls, _attrwrapper_cls, _pyston_getset_cls,
+    _capi_getset_cls, _builtin_function_or_method_cls, _set_cls, _frozenset_cls, *code_cls, *frame_cls, _capifunc_cls,
+    _wrapperdescr_cls, _wrapperobject_cls, _attrwrapperiter_cls;
 }
+#define object_cls (&_object_cls)
+#define type_cls (&_type_cls)
+#define none_cls (&_none_cls)
+#define basestring_cls (&_basestring_cls)
+#define str_cls (&_str_cls)
+#define tuple_cls (&_tuple_cls)
+#define int_cls (&_int_cls)
+#define bool_cls (&_bool_cls)
+#define complex_cls (&_complex_cls)
+#define long_cls (&_long_cls)
+#define function_cls (&_function_cls)
+#define list_cls (&_list_cls)
+#define float_cls (&_float_cls)
+#define pyston_getset_cls (&_pyston_getset_cls)
+#define attrwrapper_cls (&_attrwrapper_cls)
+#define dict_cls (&_dict_cls)
+#define file_cls (&_file_cls)
+#define builtin_function_or_method_cls (&_builtin_function_or_method_cls)
+#define module_cls (&_module_cls)
+#define member_descriptor_cls (&_member_descriptor_cls)
+#define capifunc_cls (&_capifunc_cls)
+#define method_cls (&_method_cls)
+#define wrapperobject_cls (&_wrapperobject_cls)
+#define wrapperdescr_cls (&_wrapperdescr_cls)
+#define instancemethod_cls (&_instancemethod_cls)
+#define slice_cls (&_slice_cls)
+#define set_cls (&_set_cls)
+#define frozenset_cls (&_frozenset_cls)
+#define capi_getset_cls (&_capi_getset_cls)
+#define closure_cls (&_closure_cls)
+#define property_cls (&_property_cls)
+#define staticmethod_cls (&_staticmethod_cls)
+#define classmethod_cls (&_classmethod_cls)
+#define attrwrapperiter_cls (&_attrwrapperiter_cls)
 #define unicode_cls (&PyUnicode_Type)
 #define memoryview_cls (&PyMemoryView_Type)
 
@@ -263,14 +297,14 @@ public:
 
     void freeze();
 
+    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
+               bool is_user_defined, BoxedClass* cls = NULL);
+
 protected:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
     void finishInitialization();
-
-    BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
-               bool is_user_defined);
 
     friend void setupRuntime();
     friend void setupSysEnd();
@@ -298,13 +332,13 @@ public:
     static BoxedHeapClass* create(BoxedClass* metatype, BoxedClass* base, gcvisit_func gc_visit, int attrs_offset,
                                   int weaklist_offset, int instance_size, bool is_user_defined, llvm::StringRef name);
 
-private:
     // These functions are not meant for external callers and will mostly just be called
     // by BoxedHeapClass::create(), but setupRuntime() also needs to do some manual class
     // creation due to bootstrapping issues.
     BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset, int instance_size,
                    bool is_user_defined, BoxedString* name);
 
+private:
     friend void setupRuntime();
     friend void setupSys();
     friend void setupThread();
@@ -541,9 +575,10 @@ private:
 
     BoxedString(size_t n); // non-initializing constructor
 
-    char s_data[0];
-
     friend void setupRuntime();
+
+public:
+    char s_data[0];
 };
 
 template <typename T> struct StringHash {
@@ -1167,6 +1202,8 @@ inline Box*& getArg(int idx, Box*& arg1, Box*& arg2, Box*& arg3, Box** args) {
         return arg3;
     return args[idx - 3];
 }
+
+extern "C" void typeGCHandler(GCVisitor* v, Box* b);
 }
 
 #endif

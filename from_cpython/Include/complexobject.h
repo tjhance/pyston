@@ -50,8 +50,8 @@ typedef struct _PyComplexObject PyComplexObject;
 
 // Pyston change: this is not a static object any more
 // PyAPI_DATA(PyTypeObject) PyComplex_Type;
-PyAPI_DATA(PyTypeObject*) complex_cls;
-#define PyComplex_Type (*complex_cls)
+PyAPI_DATA(PyTypeObject) _complex_cls;
+#define PyComplex_Type (_complex_cls)
 
 #define PyComplex_Check(op) PyObject_TypeCheck(op, &PyComplex_Type)
 #define PyComplex_CheckExact(op) (Py_TYPE(op) == &PyComplex_Type)

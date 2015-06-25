@@ -35,8 +35,6 @@
 
 namespace pyston {
 
-BoxedClass* long_cls;
-
 /* Table of digit values for 8-bit string -> integer conversion.
  * '0' maps to 0, ..., '9' maps to 9.
  * 'a' and 'A' map to 10, ..., 'z' and 'Z' map to 35.

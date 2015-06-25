@@ -17,8 +17,8 @@ struct _PyLongObject;
 typedef struct _PyLongObject PyLongObject;
 
 // Pyston change: this is no longer a static object
-PyAPI_DATA(PyTypeObject*) long_cls;
-#define PyLong_Type (*long_cls)
+PyAPI_DATA(PyTypeObject) _long_cls;
+#define PyLong_Type (_long_cls)
 
 #define PyLong_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LONG_SUBCLASS)

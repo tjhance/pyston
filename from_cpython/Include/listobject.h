@@ -40,8 +40,8 @@ typedef struct {
 } PyListObject;
 
 // Pyston change: this is no longer a static object
-PyAPI_DATA(PyTypeObject*) list_cls;
-#define PyList_Type (*list_cls)
+PyAPI_DATA(PyTypeObject) _list_cls;
+#define PyList_Type (_list_cls)
 
 #define PyList_Check(op) \
 		PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_LIST_SUBCLASS)

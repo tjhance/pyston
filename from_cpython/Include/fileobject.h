@@ -41,8 +41,8 @@ typedef struct _PyFileObject PyFileObject;
 PyAPI_FUNC(void) PyFile_SetFP(PyObject*, FILE*) PYSTON_NOEXCEPT;
 
 // Pyston change: this is no longer a static object
-PyAPI_DATA(PyTypeObject*) file_cls;
-#define PyFile_Type (*file_cls)
+PyAPI_DATA(PyTypeObject) _file_cls;
+#define PyFile_Type (_file_cls)
 
 #define PyFile_Check(op) PyObject_TypeCheck(op, &PyFile_Type)
 #define PyFile_CheckExact(op) (Py_TYPE(op) == &PyFile_Type)

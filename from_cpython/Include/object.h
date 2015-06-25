@@ -493,14 +493,14 @@ PyAPI_FUNC(int) PyType_IsSubtype(PyTypeObject *, PyTypeObject *) PYSTON_NOEXCEPT
 
 // Pyston change:
 //PyAPI_DATA(PyTypeObject) PyType_Type; /* built-in 'type' */
-PyAPI_DATA(PyTypeObject*) type_cls;
-#define PyType_Type (*type_cls)
+PyAPI_DATA(PyTypeObject) _type_cls;
+#define PyType_Type (_type_cls)
 
 // Pyston change: this is no longer a static object
 //PyAPI_DATA(PyTypeObject) PyBaseObject_Type; /* built-in 'object' */
 //PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
-PyAPI_DATA(PyTypeObject*) object_cls;
-#define PyBaseObject_Type (*object_cls)
+PyAPI_DATA(PyTypeObject) _object_cls;
+#define PyBaseObject_Type (_object_cls)
 
 #define PyType_Check(op) \
     PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS)

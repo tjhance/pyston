@@ -18,8 +18,8 @@ typedef struct {
 } PyFloatObject;
 
 // Pyston change: this is no longer a static object
-PyAPI_DATA(PyTypeObject*) float_cls;
-#define PyFloat_Type (*float_cls)
+PyAPI_DATA(PyTypeObject) _float_cls;
+#define PyFloat_Type (_float_cls)
 
 #define PyFloat_Check(op) PyObject_TypeCheck(op, &PyFloat_Type)
 #define PyFloat_CheckExact(op) (Py_TYPE(op) == &PyFloat_Type)

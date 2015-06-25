@@ -59,10 +59,10 @@ typedef struct _PyStringObject PyStringObject;
 #define SSTATE_INTERNED_IMMORTAL 2
 
 // Pyston change: these are no longer a static object
-PyAPI_DATA(PyTypeObject*) basestring_cls;
-#define PyBaseString_Type (*basestring_cls)
-PyAPI_DATA(PyTypeObject*) str_cls;
-#define PyString_Type (*str_cls)
+PyAPI_DATA(PyTypeObject) _basestring_cls;
+#define PyBaseString_Type (_basestring_cls)
+PyAPI_DATA(PyTypeObject) _str_cls;
+#define PyString_Type (_str_cls)
 
 #define PyString_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_STRING_SUBCLASS)

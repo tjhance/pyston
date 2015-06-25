@@ -43,8 +43,8 @@ typedef struct {
 
 // Pyston change: not a static object any more
 //PyAPI_DATA(PyTypeObject) PyFunction_Type;
-PyAPI_DATA(PyTypeObject*) function_cls;
-#define PyFunction_Type (*function_cls)
+PyAPI_DATA(PyTypeObject) _function_cls;
+#define PyFunction_Type (_function_cls)
 
 #define PyFunction_Check(op) (Py_TYPE(op) == &PyFunction_Type)
 
@@ -84,10 +84,10 @@ PyAPI_FUNC(int) PyFunction_SetClosure(PyObject *, PyObject *) PYSTON_NOEXCEPT;
 PyAPI_DATA(PyTypeObject) PyClassMethod_Type;
 PyAPI_DATA(PyTypeObject) PyStaticMethod_Type;
 #endif
-PyAPI_DATA(PyTypeObject*) classmethod_cls;
-#define PyClassMethod_Type (*classmethod_cls)
-PyAPI_DATA(PyTypeObject*) staticmethod_cls;
-#define PyStaticMethod_Type (*staticmethod_cls)
+PyAPI_DATA(PyTypeObject) _classmethod_cls;
+#define PyClassMethod_Type (classmethod_cls)
+PyAPI_DATA(PyTypeObject) _staticmethod_cls;
+#define PyStaticMethod_Type (staticmethod_cls)
 
 PyAPI_FUNC(PyObject *) PyClassMethod_New(PyObject *) PYSTON_NOEXCEPT;
 PyAPI_FUNC(PyObject *) PyStaticMethod_New(PyObject *) PYSTON_NOEXCEPT;

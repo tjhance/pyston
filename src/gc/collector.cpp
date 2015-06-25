@@ -242,6 +242,16 @@ extern "C" PyObject* PyGC_AddRoot(PyObject* obj) noexcept {
     return obj;
 }
 
+static std::unordered_map<void*, GCHandler> root_handlers;
+void registerRootCallback(void* obj, GCHandler handler) {
+    assert(root_handlers.find(obj) == root_handlers.end());
+    root_handlers[obj] = handler;
+}
+
+void deregisterRootCallback(void* obj, GCHandler handler) {
+    root_handlers.erase(obj);
+}
+
 void registerNonheapRootObject(void* obj, int size) {
     // I suppose that things could work fine even if this were true, but why would it happen?
     assert(global_heap.getAllocationFromInteriorPointer(obj) == NULL);
@@ -254,18 +264,23 @@ void registerNonheapRootObject(void* obj, int size) {
     min_nonheap_root = std::min(obj, min_nonheap_root);
 }
 
+bool isInHeap(void* p) {
+    return p >= min_nonheap_root && p <= max_nonheap_root;
+}
+
 bool isNonheapRoot(void* p) {
-    if (p > max_nonheap_root || p < min_nonheap_root)
-        return false;
-    return nonheap_roots.count(p) != 0;
+    return (p >= min_nonheap_root && p <= max_nonheap_root) && nonheap_roots.count(p) != 0;
 }
 
 bool isValidGCMemory(void* p) {
-    return isNonheapRoot(p) || (global_heap.getAllocationFromInteriorPointer(p)->user_data == p);
+    return isNonheapRoot(p) || (global_heap.getAllocationFromInteriorPointer(p)->user_data == p)
+           || root_handlers.find(p) != root_handlers.end();
 }
 
 bool isValidGCObject(void* p) {
     if (isNonheapRoot(p))
+        return true;
+    if (root_handlers.find(p) != root_handlers.end())
         return true;
     GCAllocation* al = global_heap.getAllocationFromInteriorPointer(p);
     if (!al)
@@ -325,7 +340,6 @@ bool GCVisitor::isValid(void* p) {
 
 void GCVisitor::visit(void* p) {
     if ((uintptr_t)p < SMALL_ARENA_START || (uintptr_t)p >= HUGE_ARENA_START + ARENA_SIZE) {
-        ASSERT(!p || isNonheapRoot(p), "%p", p);
         return;
     }
 
@@ -513,6 +527,11 @@ static void graphTraversalMarking(TraceStack& stack, GCVisitor& visitor) {
     static StatCounter sc_us("us_gc_mark_phase_graph_traversal");
     static StatCounter sc_marked_objs("gc_marked_object_count");
     Timer _t("traversing", /*min_usec=*/10000);
+
+    GC_TRACE_LOG("calling root handlers\n");
+    for (auto& h : root_handlers) {
+        h.second(&visitor, h.first);
+    }
 
     while (void* p = stack.pop()) {
         sc_marked_objs.log();

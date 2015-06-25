@@ -67,10 +67,10 @@ typedef struct _PySetObject PySetObject;
 PyAPI_DATA(PyTypeObject) PySet_Type;
 PyAPI_DATA(PyTypeObject) PyFrozenSet_Type;
 #endif
-PyAPI_DATA(PyTypeObject*) set_cls;
-#define PySet_Type (*set_cls)
-PyAPI_DATA(PyTypeObject*) frozenset_cls;
-#define PyFrozenSet_Type (*frozenset_cls)
+PyAPI_DATA(PyTypeObject) _set_cls;
+#define PySet_Type (_set_cls)
+PyAPI_DATA(PyTypeObject) _frozenset_cls;
+#define PyFrozenSet_Type (_frozenset_cls)
 
 /* Invariants for frozensets:
  *     data is immutable.

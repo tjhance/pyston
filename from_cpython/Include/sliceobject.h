@@ -31,8 +31,8 @@ typedef struct {
 } PySliceObject;
 
 // Pyston change: these are no longer static objects
-PyAPI_DATA(PyTypeObject*) slice_cls;
-#define PySlice_Type (*slice_cls)
+PyAPI_DATA(PyTypeObject) _slice_cls;
+#define PySlice_Type (_slice_cls)
 PyAPI_DATA(PyTypeObject*) ellipsis_cls;
 #define PyEllipsis_Type (*ellipsis_cls)
 

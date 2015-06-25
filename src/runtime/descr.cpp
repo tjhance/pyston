@@ -19,10 +19,6 @@
 
 namespace pyston {
 
-extern "C" {
-BoxedClass* wrapperdescr_cls, *wrapperobject_cls;
-}
-
 static Box* memberGet(BoxedMemberDescriptor* self, Box* inst, Box* owner) {
     RELEASE_ASSERT(self->cls == member_descriptor_cls, "");
 

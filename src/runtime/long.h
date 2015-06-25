@@ -25,7 +25,8 @@ namespace pyston {
 
 void setupLong();
 
-extern BoxedClass* long_cls;
+extern BoxedClass _long_cls;
+#define long_cls (&_long_cls)
 
 class BoxedLong : public Box {
 public:

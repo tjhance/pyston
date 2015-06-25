@@ -403,7 +403,7 @@ void BoxedClass::freeze() {
 }
 
 BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,
-                       int instance_size, bool is_user_defined)
+                       int instance_size, bool is_user_defined, BoxedClass* cl)
     : attrs(HiddenClass::makeSingleton()),
       gc_visit(gc_visit),
       attrs_offset(attrs_offset),
@@ -412,6 +412,10 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
       is_pyston_class(true),
       has___class__(false),
       has_instancecheck(false) {
+
+    if (cl) {
+        cls = cl;
+    }
 
     // Zero out the CPython tp_* slots:
     memset(&tp_name, 0, (char*)(&tp_version_tag + 1) - (char*)(&tp_name));
@@ -432,12 +436,12 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         assert(tp_base->tp_alloc);
         tp_alloc = tp_base->tp_alloc;
     } else {
-        assert(object_cls == NULL);
+        assert(object_cls == this);
         tp_alloc = PystonType_GenericAlloc;
     }
 
     if (cls == NULL) {
-        assert(type_cls == NULL);
+        assert(this == type_cls || this == object_cls || this == none_cls || this == basestring_cls || this == str_cls);
     } else {
         // The (cls == type_cls) part of the check is important because during bootstrapping
         // we might not have set up enough stuff in order to do proper subclass checking,
@@ -468,7 +472,7 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
     assert(this->gc_visit);
 
     if (!base) {
-        assert(object_cls == nullptr);
+        assert(object_cls == this);
         // we're constructing 'object'
         // Will have to add __base__ = None later
     } else {
@@ -478,16 +482,22 @@ BoxedClass::BoxedClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset
         assert(tp_basicsize >= base->tp_basicsize);
     }
 
-    if (base && cls && str_cls)
+    if (!(this == object_cls || this == type_cls || this == str_cls || this == basestring_cls || this == none_cls))
         giveAttr("__base__", base);
 
     if (attrs_offset) {
         assert(tp_basicsize >= attrs_offset + sizeof(HCAttrs));
+
         assert(attrs_offset % sizeof(void*) == 0); // Not critical I suppose, but probably signals a bug
     }
 
-    if (!is_user_defined)
-        gc::registerPermanentRoot(this);
+    if (!is_user_defined) {
+        if (gc::global_heap.contains(this)) {
+            gc::registerPermanentRoot(this);
+        } else {
+            gc::registerRootCallback(this, (gc::GCHandler)(void*)&typeGCHandler);
+        }
+    }
 }
 
 void BoxedClass::finishInitialization() {
@@ -502,6 +512,9 @@ void BoxedClass::finishInitialization() {
     this->tp_dict = this->getAttrWrapper();
 
     commonClassSetup(this);
+    if (!tp_new) {
+        tp_new = tp_base->tp_new;
+    }
 }
 
 BoxedHeapClass::BoxedHeapClass(BoxedClass* base, gcvisit_func gc_visit, int attrs_offset, int weaklist_offset,

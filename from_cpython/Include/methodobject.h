@@ -14,8 +14,8 @@ extern "C" {
 
 // Pyston change: this is no longer a static object
 //PyAPI_DATA(PyTypeObject) PyCFunction_Type;
-PyAPI_DATA(PyTypeObject*) capifunc_cls;
-#define PyCFunction_Type (*capifunc_cls)
+PyAPI_DATA(PyTypeObject) _capifunc_cls;
+#define PyCFunction_Type (_capifunc_cls)
 
 #define PyCFunction_Check(op) (Py_TYPE(op) == &PyCFunction_Type)
 

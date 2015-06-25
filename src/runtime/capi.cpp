@@ -36,8 +36,6 @@
 
 namespace pyston {
 
-BoxedClass* method_cls;
-
 extern "C" bool _PyIndex_Check(PyObject* obj) noexcept {
     return (Py_TYPE(obj)->tp_as_number != NULL && PyType_HasFeature(Py_TYPE(obj), Py_TPFLAGS_HAVE_INDEX)
             && Py_TYPE(obj)->tp_as_number->nb_index != NULL);
@@ -50,8 +48,6 @@ extern "C" bool _PyObject_CheckBuffer(PyObject* obj) noexcept {
 
 extern "C" {
 int Py_Py3kWarningFlag;
-
-BoxedClass* capifunc_cls;
 }
 
 extern "C" void _PyErr_BadInternalCall(const char* filename, int lineno) noexcept {

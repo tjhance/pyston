@@ -222,7 +222,6 @@ constexpr uintptr_t SMALL_ARENA_START = 0x1270000000L;
 constexpr uintptr_t LARGE_ARENA_START = 0x2270000000L;
 constexpr uintptr_t HUGE_ARENA_START = 0x3270000000L;
 
-
 //
 // The SmallArena allocates objects <= 3584 bytes.
 //
@@ -557,6 +556,8 @@ private:
 
 public:
     Heap() : small_arena(this), large_arena(this), huge_arena(this) {}
+
+    bool contains(void* p) { return small_arena.contains(p) || large_arena.contains(p) || huge_arena.contains(p); }
 
     GCAllocation* realloc(GCAllocation* alloc, size_t bytes) {
 

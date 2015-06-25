@@ -49,6 +49,10 @@ void registerNonheapRootObject(void* obj, int size);
 
 void registerPotentialRootRange(void* start, void* end);
 
+typedef void (*GCHandler)(GCVisitor* v, void*);
+void registerRootCallback(void* obj, GCHandler handler);
+void deregisterRootCallback(void* obj, GCHandler handler);
+
 // If you want to have a static root "location" where multiple values could be stored, use this:
 class GCRootHandle {
 public:
@@ -77,6 +81,7 @@ void enableGC();
 bool isValidGCMemory(void* p); // if p is a valid gc-allocated pointer (or a non-heap root)
 bool isValidGCObject(void* p); // whether p is valid gc memory and is set to have Python destructor semantics applied
 bool isNonheapRoot(void* p);
+bool isNonheap(void* p);
 void registerPythonObject(Box* b);
 void invalidateOrderedFinalizerList();
 

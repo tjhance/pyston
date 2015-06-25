@@ -10,8 +10,8 @@ extern "C" {
 
 // Pyston change: this is no longer a static object
 //PyAPI_DATA(PyTypeObject) PyModule_Type;
-PyAPI_DATA(PyTypeObject*) module_cls;
-#define PyModule_Type (*module_cls)
+PyAPI_DATA(PyTypeObject) _module_cls;
+#define PyModule_Type (_module_cls)
 
 #define PyModule_Check(op) PyObject_TypeCheck(op, &PyModule_Type)
 #define PyModule_CheckExact(op) (Py_TYPE(op) == &PyModule_Type)

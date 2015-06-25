@@ -46,10 +46,10 @@ typedef struct _PyMethodObject PyMethodObject;
 // Pyston change: these are not static objects any more
 PyAPI_DATA(PyTypeObject*) classobj_cls;
 PyAPI_DATA(PyTypeObject*) instance_cls;
-PyAPI_DATA(PyTypeObject*) instancemethod_cls;
+PyAPI_DATA(PyTypeObject) _instancemethod_cls;
 #define PyClass_Type (*classobj_cls)
 #define PyInstance_Type (*instance_cls)
-#define PyMethod_Type (*instancemethod_cls)
+#define PyMethod_Type (_instancemethod_cls)
 
 // Pyston change: change these to use the Py_TYPE macro instead
 // of looking at ob_type directly
