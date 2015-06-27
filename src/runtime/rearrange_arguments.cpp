@@ -27,9 +27,13 @@ namespace pyston {
 // The logic is already complex, and the function also deals with rewriting
 // the logic for ICs, so it gets pretty hairy.
 
-enum class KeywordDest {
+enum class KeywordDestType {
     POSITIONAL,
     KWARGS,
+};
+struct KeywordDest {
+    KeywordDestType type;
+    int param_idx;
 };
 static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector<bool, 8>& params_filled,
                                 BoxedString* kw_name, Box* kw_val, Box*& oarg1, Box*& oarg2, Box*& oarg3, Box** oargs,
@@ -49,7 +53,7 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
             getArg(j, oarg1, oarg2, oarg3, oargs) = kw_val;
             params_filled[j] = true;
 
-            return KeywordDest::POSITIONAL;
+            return { KeywordDestType::POSITIONAL, j };
         }
     }
 
@@ -60,7 +64,7 @@ static KeywordDest placeKeyword(const ParamNames* param_names, llvm::SmallVector
                            kw_name->c_str());
         }
         v = kw_val;
-        return KeywordDest::KWARGS;
+        return { KeywordDestType::KWARGS, 0 };
     } else {
         raiseExcHelper(TypeError, "%.200s() got an unexpected keyword argument '%s'", func_name, kw_name->c_str());
     }
@@ -144,6 +148,10 @@ extern "C" BoxedTuple* makeVarArgsFromArgsAndStarArgs(Box* arg1, Box* arg2, Box*
         starParam->elts[i] = starParamElts[i];
     }
     return starParam;
+}
+
+extern "C" void insertInDict(BoxedDict* d, Box* key, Box* val) {
+    d->d.insert(std::make_pair(key, val));
 }
 
 void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_names, const char* func_name,
@@ -240,6 +248,8 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     }
 
     llvm::SmallVector<bool, 8> params_filled(num_output_args);
+    llvm::SmallVector<KeywordDest, 8> kw_arg_idx_to_param_idx(argspec.num_keywords);
+
     for (int i = 0; i < positional_to_positional + varargs_to_positional; i++) {
         params_filled[i] = true;
     }
@@ -286,11 +296,14 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
         if (!param_names || !param_names->takes_param_names) {
             assert(okwargs);
             okwargs->d[(*keyword_names)[i]] = kw_val;
+
+            kw_arg_idx_to_param_idx[i] = { KeywordDestType::KWARGS, 0 };
             continue;
         }
 
-        auto dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3, oargs,
-                                 okwargs, func_name);
+        KeywordDest dest = placeKeyword(param_names, params_filled, (*keyword_names)[i], kw_val, oarg1, oarg2, oarg3,
+                                        oargs, okwargs, func_name);
+        kw_arg_idx_to_param_idx[i] = dest;
     }
 
     if (argspec.has_kwargs) {
@@ -361,10 +374,15 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     // If we need to make modifications, we have to copy it first.
 
     // Right now we don't handle either of these
-    if (argspec.has_kwargs || argspec.num_keywords)
+    if (argspec.has_kwargs)
         return;
 
-    if (argspec.has_starargs && !paramspec.num_defaults) {
+    RewriterVar* r_original_arg1 = rewrite_args->arg1;
+    RewriterVar* r_original_arg2 = rewrite_args->arg2;
+    RewriterVar* r_original_arg3 = rewrite_args->arg3;
+    RewriterVar* r_original_args = rewrite_args->args;
+
+    if (argspec.has_starargs && !paramspec.num_defaults && !argspec.num_keywords) {
         assert(!argspec.has_kwargs);
         assert(!argspec.num_keywords);
         // We just dispatch to a helper function to copy the args and call pyElements
@@ -468,6 +486,14 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
     }
 
     if (!(paramspec.takes_varargs && argspec.num_args > paramspec.num_args + 3) && !argspec.has_starargs) {
+        // Most general case handled here is
+        // def f(a, b, c, d=default, e=default, *args, **kwargs):
+        //
+        // f(1,2,...,keyword=blah,...)
+        // (i.e. no starargs or kwargs passed in)
+        assert(!argspec.has_starargs);
+        assert(!argspec.has_kwargs);
+
         // We might have trouble if we have more output args than input args,
         // such as if we need more space to pass defaults.
         bool did_copy = false;
@@ -543,40 +569,112 @@ void rearrangeArguments(ParamReceiveSpec paramspec, const ParamNames* param_name
             }
         }
 
+        RewriterVar* r_output_kwargs = NULL;
         if (paramspec.takes_kwargs) {
-            assert(!argspec.num_keywords && !argspec.has_kwargs);
+            assert(!argspec.has_kwargs);
 
             int kwargs_idx = paramspec.num_args + (paramspec.takes_varargs ? 1 : 0);
-            RewriterVar* r_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
+            r_output_kwargs = rewrite_args->rewriter->call(true, (void*)createDict);
 
             if (kwargs_idx == 0)
-                rewrite_args->arg1 = r_kwargs;
+                rewrite_args->arg1 = r_output_kwargs;
             if (kwargs_idx == 1)
-                rewrite_args->arg2 = r_kwargs;
+                rewrite_args->arg2 = r_output_kwargs;
             if (kwargs_idx == 2)
-                rewrite_args->arg3 = r_kwargs;
+                rewrite_args->arg3 = r_output_kwargs;
             if (kwargs_idx >= 3) {
-                assert(did_copy);
-                rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_kwargs);
+                if (!did_copy) {
+                    if (num_passed_args <= 3) {
+                        // we weren't passed args
+                        rewrite_args->args = rewrite_args->rewriter->allocate(num_output_args - 3);
+                    } else {
+                        rewrite_args->args
+                            = rewrite_args->rewriter->allocateAndCopy(rewrite_args->args, num_output_args - 3);
+                    }
+                    did_copy = true;
+                }
+                rewrite_args->args->setAttr((kwargs_idx - 3) * sizeof(Box*), r_output_kwargs);
             }
         }
 
-        for (int arg_idx = std::max((int)(paramspec.num_args - paramspec.num_defaults), (int)argspec.num_args);
+        // Here we loop through all the positional parameters which are past the last positional arg.
+        // In each case, we check if we can fill it with either a given keyword arg (done below).
+        // If not, we fill it with the default.
+        for (int arg_idx = std::max((int)argspec.num_args, paramspec.num_args - paramspec.num_defaults);
              arg_idx < paramspec.num_args; arg_idx++) {
-            int default_idx = arg_idx + paramspec.num_defaults - paramspec.num_args;
+            // Do we have a keyword for this?
+            if (!params_filled[arg_idx]) {
+                // No keyword arg, use the default
+                int default_idx = arg_idx + paramspec.num_defaults - paramspec.num_args;
+                Box* default_obj = defaults[default_idx];
+                RewriterVar* r_default = rewrite_args->rewriter->loadConst((intptr_t)default_obj);
 
-            Box* default_obj = defaults[default_idx];
+                if (arg_idx == 0)
+                    rewrite_args->arg1 = r_default;
+                else if (arg_idx == 1)
+                    rewrite_args->arg2 = r_default;
+                else if (arg_idx == 2)
+                    rewrite_args->arg3 = r_default;
+                else {
+                    if (!did_copy) {
+                        if (num_passed_args <= 3) {
+                            // we weren't passed args
+                            rewrite_args->args = rewrite_args->rewriter->allocate(num_output_args - 3);
+                        } else {
+                            rewrite_args->args
+                                = rewrite_args->rewriter->allocateAndCopy(rewrite_args->args, num_output_args - 3);
+                        }
+                        did_copy = true;
+                    }
 
+                    rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*), r_default);
+                }
+            }
+        }
+
+        for (int i = 0; i < argspec.num_keywords; i++) {
+            int arg_idx = argspec.num_args + i;
+
+            RewriterVar* r_arg;
             if (arg_idx == 0)
-                rewrite_args->arg1 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(0));
+                r_arg = r_original_arg1;
             else if (arg_idx == 1)
-                rewrite_args->arg2 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(1));
+                r_arg = r_original_arg2;
             else if (arg_idx == 2)
-                rewrite_args->arg3 = rewrite_args->rewriter->loadConst((intptr_t)default_obj, Location::forArg(2));
-            else {
-                assert(did_copy);
-                rewrite_args->args->setAttr((arg_idx - 3) * sizeof(Box*),
-                                            rewrite_args->rewriter->loadConst((intptr_t)default_obj));
+                r_arg = r_original_arg3;
+            else
+                r_arg = r_original_args->getAttr(sizeof(Box*) * (arg_idx - 3));
+
+            KeywordDest dest = kw_arg_idx_to_param_idx[i];
+            if (dest.type == KeywordDestType::POSITIONAL) {
+                // Move keyword arg into its keyword position
+                if (dest.param_idx == 0)
+                    rewrite_args->arg1 = r_arg;
+                else if (dest.param_idx == 1)
+                    rewrite_args->arg2 = r_arg;
+                else if (dest.param_idx == 2)
+                    rewrite_args->arg3 = r_arg;
+                else {
+                    if (!did_copy) {
+                        if (num_passed_args <= 3) {
+                            // we weren't passed args
+                            rewrite_args->args = rewrite_args->rewriter->allocate(num_output_args - 3);
+                        } else {
+                            rewrite_args->args
+                                = rewrite_args->rewriter->allocateAndCopy(rewrite_args->args, num_output_args - 3);
+                        }
+                        did_copy = true;
+                    }
+
+                    rewrite_args->args->setAttr((dest.param_idx - 3) * sizeof(Box*), r_arg);
+                }
+            } else {
+                // TODO we should be able to inline a lot more of the dict creation
+                // (e.g. just have a "template" dict object and copy all the attributes into the
+                // right offsets)
+                assert(r_output_kwargs != NULL);
+                rewrite_args->rewriter->call(false, (void*)insertInDict, r_output_kwargs,
+                                             rewrite_args->rewriter->loadConst((int64_t)(*keyword_names)[i]), r_arg);
             }
         }
 
