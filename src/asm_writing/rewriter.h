@@ -109,6 +109,26 @@ public:
     void dump() const;
 };
 static_assert(sizeof(Location) <= 8, "");
+
+struct VarLocations {
+    const llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4> >, 8> vars;
+
+    VarLocations() { }
+    VarLocations(llvm::SmallVector<RewriterVar*, 8> const& vars);
+    static llvm::SmallVector<std::pair<RewriterVar*, llvm::SmallVector<Location, 4> >, 8> _varLocationsConstruct(
+        llvm::SmallVector<RewriterVar*, 8> const& vars);
+    void arrangeAsArgs(Rewriter* rewriter);
+};
+
+struct GuardInfo {
+    uint8_t* guard_jmp_addr;
+    VarLocations var_locations;
+
+    GuardInfo(uint8_t* guard_jmp_addr, VarLocations const& var_locations)
+        : guard_jmp_addr(guard_jmp_addr),
+          var_locations(var_locations) { }
+};
+
 }
 
 namespace std {
@@ -281,6 +301,7 @@ public:
 
     friend class Rewriter;
     friend class JitFragmentWriter;
+    friend class VarLocations;
 };
 
 class RewriterAction {
@@ -355,6 +376,10 @@ protected:
     llvm::SmallVector<RewriterVar*, 8> args;
     llvm::SmallVector<RewriterVar*, 8> live_outs;
 
+    llvm::SmallVector<GuardInfo, 8> guard_infos;
+    void emitGuardJump(bool useJne);
+    void guardCalls();
+
     Rewriter(std::unique_ptr<ICSlotRewrite> rewrite, int num_args, const std::vector<int>& live_outs);
 
     llvm::SmallVector<RewriterAction, 32> actions;
@@ -389,12 +414,6 @@ protected:
         assertPhaseEmitting();
         return done_guarding;
     }
-
-    // Move the original IC args back into their original registers:
-    void restoreArgs();
-    // Assert that our original args are correctly placed in case we need to
-    // bail out of the IC:
-    void assertArgsInPlace();
 
     // Allocates a register.  dest must be of type Register or AnyReg
     // If otherThan is a register, guaranteed to not use that register.
@@ -529,6 +548,7 @@ public:
     static bool isLargeConstant(int64_t val) { return (val < (-1L << 31) || val >= (1L << 31) - 1); }
 
     friend class RewriterVar;
+    friend class VarLocations;
 };
 
 void setSlowpathFunc(uint8_t* pp_addr, void* func);
